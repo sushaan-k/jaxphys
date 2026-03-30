@@ -1,0 +1,103 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "neurosim"
+version = "0.1.0"
+description = "GPU-accelerated differentiable physics engine built on JAX"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "Sushaan Kandukoori" },
+]
+keywords = [
+    "physics",
+    "simulation",
+    "jax",
+    "differentiable",
+    "gpu",
+    "classical-mechanics",
+    "quantum-mechanics",
+    "electromagnetism",
+    "statistical-mechanics",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Typing :: Typed",
+]
+dependencies = [
+    "jax>=0.4.20",
+    "jaxlib>=0.4.20",
+    "pydantic>=2.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+viz = [
+    "matplotlib>=3.7",
+    "plotly>=5.15",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.1.0",
+    "mypy>=1.7",
+]
+all = ["neurosim[viz,dev]"]
+
+[project.urls]
+Homepage = "https://github.com/sushaankandukoori/neurosim"
+Documentation = "https://github.com/sushaankandukoori/neurosim#readme"
+Repository = "https://github.com/sushaankandukoori/neurosim"
+Issues = "https://github.com/sushaankandukoori/neurosim/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/neurosim"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+    "RUF",
+]
+ignore = [
+    "E501",
+    "RUF022",  # __all__ sorted by category, not alphabetically
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/neurosim/__init__.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["neurosim"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
