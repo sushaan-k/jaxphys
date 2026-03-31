@@ -9,7 +9,7 @@ from neurosim.classical.lagrangian import LagrangianSystem
 from neurosim.classical.nbody import NBody
 from neurosim.classical.rigid_body import RigidBody
 from neurosim.config import Params
-from neurosim.exceptions import ConfigurationError
+from neurosim.exceptions import ConfigurationError, PhysicsError
 
 jax.config.update("jax_enable_x64", True)
 
@@ -96,6 +96,102 @@ class TestLagrangianSystem:
                 params=None,
                 integrator="leapfrog",
             )
+
+
+class TestEnergyConservationDiagnostic:
+    """Tests for Trajectory.max_energy_drift and check_conservation."""
+
+    def test_max_energy_drift_symplectic(self) -> None:
+        """max_energy_drift should be small for a symplectic integrator."""
+
+        def H(q, p, params):
+            return p[0] ** 2 / 2 + q[0] ** 2 / 2
+
+        system = HamiltonianSystem(H, n_dof=1)
+        traj = system.simulate(
+            q0=[1.0],
+            p0=[0.0],
+            t_span=(0, 20),
+            dt=0.01,
+            params=Params(),
+            integrator="leapfrog",
+        )
+
+        drift = traj.max_energy_drift()
+        assert drift < 1e-4
+        # Also verify it is at least non-negative
+        assert drift >= 0.0
+
+    def test_max_energy_drift_larger_than_endpoint_drift(self) -> None:
+        """max_energy_drift should capture intermediate deviations."""
+
+        def H(q, p, params):
+            return p[0] ** 2 / 2 + q[0] ** 2 / 2
+
+        system = HamiltonianSystem(H, n_dof=1)
+        traj = system.simulate(
+            q0=[1.0],
+            p0=[0.0],
+            t_span=(0, 10),
+            dt=0.01,
+            params=Params(),
+            integrator="leapfrog",
+        )
+
+        # max drift over the full trajectory >= simple endpoint drift
+        assert traj.max_energy_drift() >= abs(
+            float(traj.energy[-1] - traj.energy[0])
+        )
+
+    def test_check_conservation_passes(self) -> None:
+        """check_conservation should not raise for a well-behaved sim."""
+
+        def H(q, p, params):
+            return p[0] ** 2 / 2 + q[0] ** 2 / 2
+
+        system = HamiltonianSystem(H, n_dof=1)
+        traj = system.simulate(
+            q0=[1.0],
+            p0=[0.0],
+            t_span=(0, 5),
+            dt=0.01,
+            params=Params(),
+            integrator="leapfrog",
+        )
+        # Should not raise
+        traj.check_conservation(tolerance=1e-3)
+
+    def test_check_conservation_raises(self) -> None:
+        """check_conservation should raise PhysicsError for bad tolerance."""
+
+        def H(q, p, params):
+            return p[0] ** 2 / 2 + q[0] ** 2 / 2
+
+        system = HamiltonianSystem(H, n_dof=1)
+        traj = system.simulate(
+            q0=[1.0],
+            p0=[0.0],
+            t_span=(0, 10),
+            dt=0.1,  # large dt => noticeable drift
+            params=Params(),
+            integrator="euler",
+        )
+        with pytest.raises(PhysicsError, match="Energy conservation violated"):
+            traj.check_conservation(tolerance=1e-15)
+
+    def test_max_energy_drift_no_energy(self) -> None:
+        """max_energy_drift returns 0.0 when energy is None."""
+        from neurosim.state import Trajectory
+
+        traj = Trajectory(
+            t=jnp.array([0.0, 1.0]),
+            q=jnp.array([[1.0], [0.9]]),
+            p=jnp.array([[0.0], [0.1]]),
+            energy=None,
+        )
+        assert traj.max_energy_drift() == 0.0
+        # check_conservation should also be safe
+        traj.check_conservation(tolerance=1e-10)
 
 
 class TestHamiltonianSystem:

@@ -94,6 +94,41 @@ class Trajectory:
             return float(jnp.abs(ef - e0))
         return float(jnp.abs((ef - e0) / e0))
 
+    def max_energy_drift(self) -> float:
+        """Compute maximum absolute energy deviation from the initial value.
+
+        Unlike :meth:`energy_drift` which only compares the first and last
+        values, this method inspects *every* recorded energy sample and
+        returns the worst-case deviation.
+
+        Returns:
+            max_t |E(t) - E(0)|.  Returns 0.0 if energy was not tracked.
+        """
+        if self.energy is None:
+            return 0.0
+        return float(jnp.max(jnp.abs(self.energy - self.energy[0])))
+
+    def check_conservation(self, tolerance: float) -> None:
+        """Assert that maximum absolute energy drift stays within *tolerance*.
+
+        This is a convenience guard for automated validation of
+        simulation quality.
+
+        Args:
+            tolerance: Maximum allowed absolute energy deviation.
+
+        Raises:
+            PhysicsError: If the maximum drift exceeds *tolerance*.
+        """
+        from neurosim.exceptions import PhysicsError
+
+        drift = self.max_energy_drift()
+        if drift > tolerance:
+            raise PhysicsError(
+                f"Energy conservation violated: max |dE| = {drift:.6e} "
+                f"exceeds tolerance {tolerance:.6e}"
+            )
+
 
 @dataclass(frozen=True)
 class NBodyState:
