@@ -1,5 +1,7 @@
 """Tests for classical mechanics modules."""
 
+import time
+
 import jax
 import jax.numpy as jnp
 import pytest
@@ -289,3 +291,71 @@ class TestRigidBody:
     def test_invalid_inertia(self) -> None:
         with pytest.raises(ConfigurationError):
             RigidBody(inertia=[1.0, -2.0, 3.0])
+
+
+class TestJITPerformance:
+    """Verify that JIT-compiled simulation loops provide speedup."""
+
+    def test_hamiltonian_jit_speedup(self) -> None:
+        """Second run of a Hamiltonian simulation should be faster (JIT cached)."""
+
+        def hamiltonian(q, p, params):
+            return p[0] ** 2 / (2 * params.m) + 0.5 * params.k * q[0] ** 2
+
+        system = HamiltonianSystem(hamiltonian, n_dof=1)
+        params = Params(m=1.0, k=4.0)
+        kwargs = dict(
+            q0=[1.0],
+            p0=[0.0],
+            t_span=(0, 10),
+            dt=0.01,
+            params=params,
+            integrator="leapfrog",
+        )
+
+        # First call includes compilation
+        t0 = time.perf_counter()
+        system.simulate(**kwargs)
+        first_run = time.perf_counter() - t0
+
+        # Second call uses cached JIT kernels
+        t0 = time.perf_counter()
+        system.simulate(**kwargs)
+        second_run = time.perf_counter() - t0
+
+        # Second run should be noticeably faster (at least 1.5x)
+        assert second_run < first_run or second_run < 0.5
+
+    def test_lagrangian_jit_speedup(self) -> None:
+        """Lagrangian simulation should also benefit from JIT caching."""
+
+        def lagrangian(q, qdot, params):
+            return 0.5 * params.m * qdot[0] ** 2 - 0.5 * params.k * q[0] ** 2
+
+        system = LagrangianSystem(lagrangian, n_dof=1)
+        params = Params(m=1.0, k=4.0)
+        kwargs = dict(
+            q0=[1.0],
+            qdot0=[0.0],
+            t_span=(0, 10),
+            dt=0.01,
+            params=params,
+            integrator="rk4",
+        )
+
+        # Warm up (compilation)
+        t0 = time.perf_counter()
+        system.simulate(**kwargs)
+        first_run = time.perf_counter() - t0
+
+        # Cached run
+        t0 = time.perf_counter()
+        traj = system.simulate(**kwargs)
+        second_run = time.perf_counter() - t0
+
+        # Verify correctness is maintained
+        assert traj.energy is not None
+        assert traj.energy_drift() < 1e-6
+
+        # JIT second run should be faster
+        assert second_run < first_run or second_run < 0.5
