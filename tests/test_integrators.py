@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import pytest
 
 from neurosim.classical.integrators import (
+    adaptive_rk45,
     euler,
     get_integrator,
     leapfrog,
@@ -130,6 +131,67 @@ class TestVelocityVerlet:
         assert t_new == pytest.approx(0.01)
 
 
+class TestAdaptiveRK45:
+    """Tests for the Dormand-Prince adaptive RK45 integrator."""
+
+    def test_single_step_accuracy(self) -> None:
+        """A single adaptive step should be at least as accurate as fixed RK4."""
+        q0 = jnp.array([1.0])
+        p0 = jnp.array([0.0])
+        dt = 0.1
+
+        q_rk4, p_rk4, _ = rk4(harmonic_deriv, q0, p0, 0.0, dt, None)
+        q_rk45, p_rk45, _ = adaptive_rk45(
+            harmonic_deriv, q0, p0, 0.0, dt, None
+        )
+
+        exact_q = jnp.cos(dt)
+        exact_p = -jnp.sin(dt)
+
+        err_rk4 = float(jnp.abs(q_rk4[0] - exact_q) + jnp.abs(p_rk4[0] - exact_p))
+        err_rk45 = float(
+            jnp.abs(q_rk45[0] - exact_q) + jnp.abs(p_rk45[0] - exact_p)
+        )
+
+        # RK45 (5th-order) should beat RK4 (4th-order)
+        assert err_rk45 < err_rk4
+
+    def test_long_integration_accuracy(self) -> None:
+        """Adaptive RK45 with few large steps should beat many fixed RK4 steps."""
+        q0 = jnp.array([1.0])
+        p0 = jnp.array([0.0])
+        t_end = 2 * jnp.pi  # one full period
+
+        # Fixed RK4 with 100 steps
+        q, p, t = q0, p0, 0.0
+        dt_fixed = float(t_end) / 100
+        for _ in range(100):
+            q, p, t = rk4(harmonic_deriv, q, p, t, dt_fixed, None)
+        err_rk4 = float(jnp.abs(q[0] - 1.0) + jnp.abs(p[0] - 0.0))
+
+        # Adaptive RK45 with same nominal dt (but it adapts)
+        q, p, t = q0, p0, 0.0
+        steps = 0
+        while t < float(t_end) - 1e-12:
+            remaining = float(t_end) - t
+            dt_suggest = min(dt_fixed, remaining)
+            q, p, t = adaptive_rk45(
+                harmonic_deriv, q, p, t, dt_suggest, None, dt_max=remaining
+            )
+            steps += 1
+            if steps > 500:
+                break
+
+        err_rk45 = float(jnp.abs(q[0] - 1.0) + jnp.abs(p[0] - 0.0))
+
+        # Adaptive should be more accurate
+        assert err_rk45 < err_rk4
+
+    def test_registry_lookup(self) -> None:
+        fn = get_integrator("adaptive_rk45")
+        assert fn is adaptive_rk45
+
+
 class TestIntegratorRegistry:
     """Tests for the integrator lookup."""
 
@@ -150,6 +212,7 @@ class TestIntegratorRegistry:
             "stormer_verlet",
             "yoshida4",
             "rk4",
+            "adaptive_rk45",
         ]:
             fn = get_integrator(name)
             assert callable(fn)
