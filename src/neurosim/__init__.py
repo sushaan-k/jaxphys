@@ -26,6 +26,11 @@ jax.config.update("jax_enable_x64", True)  # type: ignore[no-untyped-call]
 __version__ = "0.1.0"
 
 # Core configuration
+# Classical mechanics
+from neurosim.classical.coupled_oscillators import (
+    coupled_oscillators,
+    normal_mode_frequencies,
+)
 from neurosim.classical.hamiltonian import HamiltonianSystem
 from neurosim.classical.integrators import (
     adaptive_rk45,
@@ -37,8 +42,6 @@ from neurosim.classical.integrators import (
     velocity_verlet,
     yoshida4,
 )
-
-# Classical mechanics
 from neurosim.classical.lagrangian import LagrangianSystem
 from neurosim.classical.nbody import NBody
 from neurosim.classical.rigid_body import RigidBody
@@ -193,6 +196,8 @@ __all__ = [
     "yoshida4",
     "rk4",
     "adaptive_rk45",
+    "coupled_oscillators",
+    "normal_mode_frequencies",
     # EM
     "EMGrid",
     "PlaneWave",
