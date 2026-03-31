@@ -1,13 +1,20 @@
 # neurosim
 
-**GPU-accelerated differentiable physics engine built on JAX.**
-
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![CI](https://github.com/sushaankandukoori/neurosim/actions/workflows/ci.yml/badge.svg)](https://github.com/sushaankandukoori/neurosim/actions)
+[![CI](https://github.com/sushaan-k/neurosim/actions/workflows/ci.yml/badge.svg)](https://github.com/sushaan-k/neurosim/actions)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+**GPU-accelerated differentiable physics engine built on JAX.**
+
 ---
+
+## At a Glance
+
+- Classical, EM, quantum, optics, and statistical mechanics modules
+- JAX-native autodiff and JIT compilation throughout the simulation stack
+- Long-horizon integrators, FDTD fields, wave mechanics, and Ising simulation
+- Examples, notebooks, and visualization tools for research and teaching
 
 ## The Problem
 
