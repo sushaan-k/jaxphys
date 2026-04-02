@@ -197,11 +197,21 @@ See the `examples/` directory:
 - `ising_phase_transition.py` -- Temperature sweep across the 2D Ising critical point
 - `spacecraft_trajectory.py` -- Differentiable launch targeting on a lunar-gravity profile
 
+## Demo
+
+Run the offline walkthrough with:
+
+```bash
+uv run python examples/demo.py
+```
+
+For richer simulations, notebooks, and plots, see `examples/` and `notebooks/`.
+
 ## Development
 
 ```bash
 # Clone and install in development mode
-git clone https://github.com/sushaankandukoori/neurosim.git
+git clone https://github.com/sushaan-k/neurosim.git
 cd neurosim
 pip install -e ".[all]"
 

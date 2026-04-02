@@ -56,10 +56,10 @@ dev = [
 all = ["neurosim[viz,dev]"]
 
 [project.urls]
-Homepage = "https://github.com/sushaankandukoori/neurosim"
-Documentation = "https://github.com/sushaankandukoori/neurosim#readme"
-Repository = "https://github.com/sushaankandukoori/neurosim"
-Issues = "https://github.com/sushaankandukoori/neurosim/issues"
+Homepage = "https://github.com/sushaan-k/neurosim"
+Documentation = "https://github.com/sushaan-k/neurosim#readme"
+Repository = "https://github.com/sushaan-k/neurosim"
+Issues = "https://github.com/sushaan-k/neurosim/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/neurosim"]
