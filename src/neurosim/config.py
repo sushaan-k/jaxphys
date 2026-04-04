@@ -126,6 +126,20 @@ class QuantumConfig(BaseModel):
     method: Literal["split_operator", "crank_nicolson"] = "split_operator"
 
 
+class FluidConfig(BaseModel):
+    """Configuration for fluid dynamics simulations.
+
+    Attributes:
+        viscosity: Kinematic viscosity (in lattice units for LBM).
+        method: Simulation method.
+        boundary: Boundary condition type.
+    """
+
+    viscosity: float = Field(0.1, gt=0.0)
+    method: Literal["lbm", "navier_stokes"] = "lbm"
+    boundary: Literal["periodic", "no_slip", "free_slip"] = "periodic"
+
+
 class IsingConfig(BaseModel):
     """Configuration for Ising model simulations.
 

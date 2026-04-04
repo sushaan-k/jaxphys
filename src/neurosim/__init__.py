@@ -43,6 +43,7 @@ from neurosim.classical.nbody import NBody
 from neurosim.classical.rigid_body import RigidBody
 from neurosim.config import (
     EMConfig,
+    FluidConfig,
     IsingConfig,
     NBodyConfig,
     Params,
@@ -53,7 +54,12 @@ from neurosim.em.charges import ChargeSystem, PointCharge
 
 # Electromagnetism
 from neurosim.em.fdtd import EMGrid, PlaneWave, Wall
+from neurosim.em.fdtd3d import DielectricRegion, EMGrid3D, PointSource3D
 from neurosim.em.waveguides import RectangularWaveguide
+
+# Fluid dynamics
+from neurosim.fluids.lbm import D2Q9, LBMGrid, Obstacle
+from neurosim.fluids.navier_stokes import NavierStokesSolver
 
 # Exceptions
 from neurosim.exceptions import (
@@ -99,7 +105,10 @@ from neurosim.quantum.stationary import solve_eigenvalue_problem
 # State representations
 from neurosim.state import (
     EMFieldHistory,
+    EMFieldHistory3D,
     EMFieldState,
+    FluidHistory,
+    FluidState,
     IsingResult,
     NBodyState,
     NBodyTrajectory,
@@ -145,6 +154,7 @@ __all__ = [
     "SimulationConfig",
     "NBodyConfig",
     "EMConfig",
+    "FluidConfig",
     "QuantumConfig",
     "IsingConfig",
     # State
@@ -154,6 +164,9 @@ __all__ = [
     "NBodyTrajectory",
     "EMFieldState",
     "EMFieldHistory",
+    "EMFieldHistory3D",
+    "FluidState",
+    "FluidHistory",
     "QuantumState",
     "QuantumResult",
     "IsingResult",
@@ -182,9 +195,17 @@ __all__ = [
     "EMGrid",
     "PlaneWave",
     "Wall",
+    "EMGrid3D",
+    "PointSource3D",
+    "DielectricRegion",
     "PointCharge",
     "ChargeSystem",
     "RectangularWaveguide",
+    # Fluids
+    "D2Q9",
+    "LBMGrid",
+    "Obstacle",
+    "NavierStokesSolver",
     # Quantum
     "solve_schrodinger",
     "GaussianWavepacket",

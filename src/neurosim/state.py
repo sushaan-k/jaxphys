@@ -240,6 +240,85 @@ class QuantumResult:
 
 
 @dataclass(frozen=True)
+class FluidState:
+    """State of a fluid simulation on a 2D grid.
+
+    Attributes:
+        rho: Density field, shape (nx, ny).
+        ux: x-velocity field, shape (nx, ny).
+        uy: y-velocity field, shape (nx, ny).
+        t: Current time.
+    """
+
+    rho: Array
+    ux: Array
+    uy: Array
+    t: float
+
+
+@dataclass(frozen=True)
+class FluidHistory:
+    """Time series of fluid field snapshots.
+
+    Attributes:
+        t: Time values, shape (n_snapshots,).
+        rho: Density snapshots, shape (n_snapshots, nx, ny).
+        ux: x-velocity snapshots, shape (n_snapshots, nx, ny).
+        uy: y-velocity snapshots, shape (n_snapshots, nx, ny).
+        vorticity: Vorticity snapshots, shape (n_snapshots, nx, ny), or None.
+        grid_x: Spatial x-coordinates.
+        grid_y: Spatial y-coordinates.
+    """
+
+    t: Array
+    rho: Array
+    ux: Array
+    uy: Array
+    vorticity: Array | None = None
+    grid_x: Array | None = None
+    grid_y: Array | None = None
+
+    @property
+    def n_snapshots(self) -> int:
+        """Number of saved snapshots."""
+        return int(self.t.shape[0])
+
+    @property
+    def speed(self) -> Array:
+        """Speed field |u| at each snapshot."""
+        return jnp.sqrt(self.ux**2 + self.uy**2)
+
+
+@dataclass(frozen=True)
+class EMFieldHistory3D:
+    """Time series of 3D electromagnetic field snapshots.
+
+    Attributes:
+        t: Time values, shape (n_snapshots,).
+        ex: Ex field snapshots, shape (n_snapshots, nx, ny, nz).
+        ey: Ey field snapshots, shape (n_snapshots, nx, ny, nz).
+        ez: Ez field snapshots, shape (n_snapshots, nx, ny, nz).
+        hx: Hx field snapshots, shape (n_snapshots, nx, ny, nz).
+        hy: Hy field snapshots, shape (n_snapshots, nx, ny, nz).
+        hz: Hz field snapshots, shape (n_snapshots, nx, ny, nz).
+        grid_x: Spatial x-coordinates.
+        grid_y: Spatial y-coordinates.
+        grid_z: Spatial z-coordinates.
+    """
+
+    t: Array
+    ex: Array
+    ey: Array
+    ez: Array
+    hx: Array
+    hy: Array
+    hz: Array
+    grid_x: Array
+    grid_y: Array
+    grid_z: Array
+
+
+@dataclass(frozen=True)
 class IsingResult:
     """Result of an Ising model Monte Carlo simulation.
 
