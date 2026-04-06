@@ -115,13 +115,14 @@ class NavierStokesSolver:
 
         logger.info(
             "Starting Navier-Stokes: grid=%dx%d, nu=%.4f, dt=%.4f, n_steps=%d",
-            nx, ny, nu, dt, n_steps,
+            nx,
+            ny,
+            nu,
+            dt,
+            n_steps,
         )
 
-        if initial_omega is None:
-            omega = jnp.zeros((nx, ny))
-        else:
-            omega = initial_omega
+        omega = jnp.zeros((nx, ny)) if initial_omega is None else initial_omega
 
         psi = jnp.zeros((nx, ny))
 
@@ -129,8 +130,6 @@ class NavierStokesSolver:
         grid_y = jnp.arange(ny, dtype=jnp.float64) * dx
 
         dx2 = dx * dx
-        dt_nu_dx2 = dt * nu / dx2
-        dt_over_2dx = dt / (2.0 * dx)
 
         def poisson_step(psi_in: Array, omega_in: Array) -> Array:
             """One Jacobi iteration for the Poisson equation."""
@@ -151,7 +150,9 @@ class NavierStokesSolver:
         def solve_poisson(psi_in: Array, omega_in: Array) -> Array:
             """Solve Poisson equation with multiple Jacobi iterations."""
 
-            def body(carry: tuple[Array, int], _: None) -> tuple[tuple[Array, int], None]:
+            def body(
+                carry: tuple[Array, int], _: None
+            ) -> tuple[tuple[Array, int], None]:
                 p, i = carry
                 p = poisson_step(p, omega_in)
                 return (p, i + 1), None
@@ -209,12 +210,12 @@ class NavierStokesSolver:
             omega_new = omega_new.at[-1, :].set(-2.0 * psi_c[-2, :] / dx2)
 
             # Recompute velocity for output
-            u_out = (
-                jnp.roll(psi_c, -1, axis=1) - jnp.roll(psi_c, 1, axis=1)
-            ) / (2.0 * dx)
-            v_out = -(
-                jnp.roll(psi_c, -1, axis=0) - jnp.roll(psi_c, 1, axis=0)
-            ) / (2.0 * dx)
+            u_out = (jnp.roll(psi_c, -1, axis=1) - jnp.roll(psi_c, 1, axis=1)) / (
+                2.0 * dx
+            )
+            v_out = -(jnp.roll(psi_c, -1, axis=0) - jnp.roll(psi_c, 1, axis=0)) / (
+                2.0 * dx
+            )
 
             # Enforce no-slip on velocity
             u_out = u_out.at[0, :].set(0.0)
@@ -241,7 +242,9 @@ class NavierStokesSolver:
             uy_all = uy_all[indices]
 
         # Compute vorticity from saved velocity
-        vort = jnp.gradient(uy_all, axis=1) - jnp.gradient(ux_all, axis=2)
+        duy_dx: Array = jnp.gradient(uy_all, axis=1)  # type: ignore[assignment]
+        dux_dy: Array = jnp.gradient(ux_all, axis=2)  # type: ignore[assignment]
+        vort = duy_dx - dux_dy
 
         t = jnp.arange(rho_all.shape[0], dtype=jnp.float64) * save_every * dt
 

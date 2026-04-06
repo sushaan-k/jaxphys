@@ -27,7 +27,6 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
-from neurosim.config import EMConfig
 from neurosim.exceptions import ConfigurationError
 from neurosim.state import EMFieldHistory3D
 
@@ -103,9 +102,7 @@ class EMGrid3D:
         self._materials: list[DielectricRegion] = []
 
         if min(size) < 8:
-            raise ConfigurationError(
-                f"Grid must be at least 8x8x8, got {size}"
-            )
+            raise ConfigurationError(f"Grid must be at least 8x8x8, got {size}")
 
     @property
     def size(self) -> tuple[int, int, int]:
@@ -163,15 +160,9 @@ class EMGrid3D:
         sy = build_1d(ny)
         sz = build_1d(nz)
 
-        sigma_x = jnp.broadcast_to(
-            sx[:, jnp.newaxis, jnp.newaxis], (nx, ny, nz)
-        )
-        sigma_y = jnp.broadcast_to(
-            sy[jnp.newaxis, :, jnp.newaxis], (nx, ny, nz)
-        )
-        sigma_z = jnp.broadcast_to(
-            sz[jnp.newaxis, jnp.newaxis, :], (nx, ny, nz)
-        )
+        sigma_x = jnp.broadcast_to(sx[:, jnp.newaxis, jnp.newaxis], (nx, ny, nz))
+        sigma_y = jnp.broadcast_to(sy[jnp.newaxis, :, jnp.newaxis], (nx, ny, nz))
+        sigma_z = jnp.broadcast_to(sz[jnp.newaxis, jnp.newaxis, :], (nx, ny, nz))
 
         return sigma_x, sigma_y, sigma_z
 
@@ -210,7 +201,11 @@ class EMGrid3D:
 
         logger.info(
             "Starting 3D FDTD: grid=%dx%dx%d, dt=%.2e, n_steps=%d",
-            nx, ny, nz, dt, n_steps,
+            nx,
+            ny,
+            nz,
+            dt,
+            n_steps,
         )
 
         # Initialize fields
@@ -229,9 +224,7 @@ class EMGrid3D:
         dt_eps_dx = dt / (float(EPS0) * dx)
 
         # Source parameters
-        source_omegas = [
-            2.0 * jnp.pi * s.frequency for s in self._sources
-        ]
+        source_omegas = [2.0 * jnp.pi * s.frequency for s in self._sources]
 
         grid_x = jnp.arange(nx) * dx
         grid_y = jnp.arange(ny) * dx
@@ -257,36 +250,30 @@ class EMGrid3D:
                 ex_f: Array, ey_f: Array, ez_f: Array
             ) -> tuple[Array, Array, Array]:
                 # curl_x = dEz/dy - dEy/dz
-                curl_x = (
-                    (jnp.roll(ez_f, -1, axis=1) - ez_f)
-                    - (jnp.roll(ey_f, -1, axis=2) - ey_f)
+                curl_x = (jnp.roll(ez_f, -1, axis=1) - ez_f) - (
+                    jnp.roll(ey_f, -1, axis=2) - ey_f
                 )
                 # curl_y = dEx/dz - dEz/dx
-                curl_y = (
-                    (jnp.roll(ex_f, -1, axis=2) - ex_f)
-                    - (jnp.roll(ez_f, -1, axis=0) - ez_f)
+                curl_y = (jnp.roll(ex_f, -1, axis=2) - ex_f) - (
+                    jnp.roll(ez_f, -1, axis=0) - ez_f
                 )
                 # curl_z = dEy/dx - dEx/dy
-                curl_z = (
-                    (jnp.roll(ey_f, -1, axis=0) - ey_f)
-                    - (jnp.roll(ex_f, -1, axis=1) - ex_f)
+                curl_z = (jnp.roll(ey_f, -1, axis=0) - ey_f) - (
+                    jnp.roll(ex_f, -1, axis=1) - ex_f
                 )
                 return curl_x, curl_y, curl_z
 
             def curl_h_periodic(
                 hx_f: Array, hy_f: Array, hz_f: Array
             ) -> tuple[Array, Array, Array]:
-                curl_x = (
-                    (hz_f - jnp.roll(hz_f, 1, axis=1))
-                    - (hy_f - jnp.roll(hy_f, 1, axis=2))
+                curl_x = (hz_f - jnp.roll(hz_f, 1, axis=1)) - (
+                    hy_f - jnp.roll(hy_f, 1, axis=2)
                 )
-                curl_y = (
-                    (hx_f - jnp.roll(hx_f, 1, axis=2))
-                    - (hz_f - jnp.roll(hz_f, 1, axis=0))
+                curl_y = (hx_f - jnp.roll(hx_f, 1, axis=2)) - (
+                    hz_f - jnp.roll(hz_f, 1, axis=0)
                 )
-                curl_z = (
-                    (hy_f - jnp.roll(hy_f, 1, axis=0))
-                    - (hx_f - jnp.roll(hx_f, 1, axis=1))
+                curl_z = (hy_f - jnp.roll(hy_f, 1, axis=0)) - (
+                    hx_f - jnp.roll(hx_f, 1, axis=1)
                 )
                 return curl_x, curl_y, curl_z
 
@@ -317,7 +304,8 @@ class EMGrid3D:
                 # Hx: dEz/dy - dEy/dz
                 hx_new = hx_c.at[:, :-1, :-1].set(
                     hx_c[:, :-1, :-1]
-                    - dt_mu_dx * (
+                    - dt_mu_dx
+                    * (
                         (ez_c[:, 1:, :-1] - ez_c[:, :-1, :-1])
                         - (ey_c[:, :-1, 1:] - ey_c[:, :-1, :-1])
                     )
@@ -325,7 +313,8 @@ class EMGrid3D:
                 # Hy: dEx/dz - dEz/dx
                 hy_new = hy_c.at[:-1, :, :-1].set(
                     hy_c[:-1, :, :-1]
-                    - dt_mu_dx * (
+                    - dt_mu_dx
+                    * (
                         (ex_c[:-1, :, 1:] - ex_c[:-1, :, :-1])
                         - (ez_c[1:, :, :-1] - ez_c[:-1, :, :-1])
                     )
@@ -333,7 +322,8 @@ class EMGrid3D:
                 # Hz: dEy/dx - dEx/dy
                 hz_new = hz_c.at[:-1, :-1, :].set(
                     hz_c[:-1, :-1, :]
-                    - dt_mu_dx * (
+                    - dt_mu_dx
+                    * (
                         (ey_c[1:, :-1, :] - ey_c[:-1, :-1, :])
                         - (ex_c[:-1, 1:, :] - ex_c[:-1, :-1, :])
                     )
@@ -343,7 +333,8 @@ class EMGrid3D:
                 # Ex: dHz/dy - dHy/dz
                 ex_new = ex_c.at[:, 1:, 1:].set(
                     ex_c[:, 1:, 1:]
-                    + (dt_eps_dx / eps_r[:, 1:, 1:]) * (
+                    + (dt_eps_dx / eps_r[:, 1:, 1:])
+                    * (
                         (hz_new[:, 1:, 1:] - hz_new[:, :-1, 1:])
                         - (hy_new[:, 1:, 1:] - hy_new[:, 1:, :-1])
                     )
@@ -351,7 +342,8 @@ class EMGrid3D:
                 # Ey: dHx/dz - dHz/dx
                 ey_new = ey_c.at[1:, :, 1:].set(
                     ey_c[1:, :, 1:]
-                    + (dt_eps_dx / eps_r[1:, :, 1:]) * (
+                    + (dt_eps_dx / eps_r[1:, :, 1:])
+                    * (
                         (hx_new[1:, :, 1:] - hx_new[1:, :, :-1])
                         - (hz_new[1:, :, 1:] - hz_new[:-1, :, 1:])
                     )
@@ -359,7 +351,8 @@ class EMGrid3D:
                 # Ez: dHy/dx - dHx/dy
                 ez_new = ez_c.at[1:, 1:, :].set(
                     ez_c[1:, 1:, :]
-                    + (dt_eps_dx / eps_r[1:, 1:, :]) * (
+                    + (dt_eps_dx / eps_r[1:, 1:, :])
+                    * (
                         (hy_new[1:, 1:, :] - hy_new[:-1, 1:, :])
                         - (hx_new[1:, 1:, :] - hx_new[1:, :-1, :])
                     )
@@ -375,18 +368,28 @@ class EMGrid3D:
             # Add sources
             ex_new, ey_new, ez_new = add_sources(ex_new, ey_new, ez_new, t_c)
 
-            return (
-                ex_new, ey_new, ez_new, hx_new, hy_new, hz_new, step_idx + 1
-            ), (
-                ex_new, ey_new, ez_new, hx_new, hy_new, hz_new,
+            return (ex_new, ey_new, ez_new, hx_new, hy_new, hz_new, step_idx + 1), (
+                ex_new,
+                ey_new,
+                ez_new,
+                hx_new,
+                hy_new,
+                hz_new,
                 jnp.asarray(t_c + dt),
             )
 
         init = (ex, ey, ez, hx, hy, hz, 0)
-        _, (
-            ex_all, ey_all, ez_all,
-            hx_all, hy_all, hz_all,
-            t_all,
+        (
+            _,
+            (
+                ex_all,
+                ey_all,
+                ez_all,
+                hx_all,
+                hy_all,
+                hz_all,
+                t_all,
+            ),
         ) = jax.lax.scan(step, init, None, length=n_steps)
 
         # Subsample

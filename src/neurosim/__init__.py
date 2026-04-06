@@ -57,10 +57,6 @@ from neurosim.em.fdtd import EMGrid, PlaneWave, Wall
 from neurosim.em.fdtd3d import DielectricRegion, EMGrid3D, PointSource3D
 from neurosim.em.waveguides import RectangularWaveguide
 
-# Fluid dynamics
-from neurosim.fluids.lbm import D2Q9, LBMGrid, Obstacle
-from neurosim.fluids.navier_stokes import NavierStokesSolver
-
 # Exceptions
 from neurosim.exceptions import (
     ConfigurationError,
@@ -72,6 +68,10 @@ from neurosim.exceptions import (
     SimulationError,
     VisualizationError,
 )
+
+# Fluid dynamics
+from neurosim.fluids.lbm import D2Q9, LBMGrid, Obstacle
+from neurosim.fluids.navier_stokes import NavierStokesSolver
 from neurosim.optics.diffraction import (
     circular_aperture,
     double_slit,

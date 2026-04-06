@@ -29,14 +29,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import ClassVar, Literal
+from typing import Literal
 
 import jax
 import jax.numpy as jnp
 from jax import Array
 
 from neurosim.config import FluidConfig
-from neurosim.exceptions import ConfigurationError, NumericalInstabilityError
+from neurosim.exceptions import ConfigurationError
 from neurosim.state import FluidHistory
 
 logger = logging.getLogger(__name__)
@@ -52,14 +52,14 @@ class D2Q9:
     # Lattice velocity vectors: (9, 2)
     c: Array = jnp.array(
         [
-            [0, 0],   # 0: rest
-            [1, 0],   # 1: east
-            [0, 1],   # 2: north
+            [0, 0],  # 0: rest
+            [1, 0],  # 1: east
+            [0, 1],  # 2: north
             [-1, 0],  # 3: west
             [0, -1],  # 4: south
-            [1, 1],   # 5: NE
+            [1, 1],  # 5: NE
             [-1, 1],  # 6: NW
-            [-1, -1], # 7: SW
+            [-1, -1],  # 7: SW
             [1, -1],  # 8: SE
         ]
     )
@@ -208,26 +208,18 @@ class LBMGrid:
         obstacle_mask = self._build_obstacle_mask()
 
         logger.info(
-            "Starting LBM simulation: grid=%dx%d, tau=%.3f, u_inlet=%.4f, "
-            "n_steps=%d",
-            nx, ny, tau, u_inlet, n_steps,
+            "Starting LBM simulation: grid=%dx%d, tau=%.3f, u_inlet=%.4f, n_steps=%d",
+            nx,
+            ny,
+            tau,
+            u_inlet,
+            n_steps,
         )
 
         # Initialize macroscopic fields
-        if initial_rho is None:
-            rho = jnp.ones((nx, ny))
-        else:
-            rho = initial_rho
-
-        if initial_ux is None:
-            ux = jnp.full((nx, ny), u_inlet)
-        else:
-            ux = initial_ux
-
-        if initial_uy is None:
-            uy = jnp.zeros((nx, ny))
-        else:
-            uy = initial_uy
+        rho = jnp.ones((nx, ny)) if initial_rho is None else initial_rho
+        ux = jnp.full((nx, ny), u_inlet) if initial_ux is None else initial_ux
+        uy = jnp.zeros((nx, ny)) if initial_uy is None else initial_uy
 
         # Initialize distribution to equilibrium
         cx = jnp.array([int(c[i, 0]) for i in range(9)])
@@ -235,7 +227,9 @@ class LBMGrid:
         f = _compute_equilibrium(rho, ux, uy, cx, cy, w)
 
         # Zero velocity inside obstacles
-        f = jnp.where(obstacle_mask[..., jnp.newaxis], w[jnp.newaxis, jnp.newaxis, :], f)
+        f = jnp.where(
+            obstacle_mask[..., jnp.newaxis], w[jnp.newaxis, jnp.newaxis, :], f
+        )
 
         grid_x = jnp.arange(nx, dtype=jnp.float64)
         grid_y = jnp.arange(ny, dtype=jnp.float64)
@@ -309,7 +303,9 @@ class LBMGrid:
             uy_all = uy_all[indices]
 
         # Compute vorticity: d(uy)/dx - d(ux)/dy
-        vort = jnp.gradient(uy_all, axis=1) - jnp.gradient(ux_all, axis=2)
+        duy_dx: Array = jnp.gradient(uy_all, axis=1)  # type: ignore[assignment]
+        dux_dy: Array = jnp.gradient(ux_all, axis=2)  # type: ignore[assignment]
+        vort = duy_dx - dux_dy
 
         t = jnp.arange(rho_all.shape[0], dtype=jnp.float64) * save_every
 
@@ -346,8 +342,10 @@ def _compute_equilibrium(
     # c_i . u for each direction: (nx, ny, 9)
     cu = cx * ux[..., jnp.newaxis] + cy * uy[..., jnp.newaxis]
 
-    f_eq = w * rho[..., jnp.newaxis] * (
-        1.0 + 3.0 * cu + 4.5 * cu**2 - 1.5 * u_sq[..., jnp.newaxis]
+    f_eq = (
+        w
+        * rho[..., jnp.newaxis]
+        * (1.0 + 3.0 * cu + 4.5 * cu**2 - 1.5 * u_sq[..., jnp.newaxis])
     )
     return f_eq
 
