@@ -28,6 +28,7 @@ __version__ = "0.1.0"
 # Core configuration
 from neurosim.classical.hamiltonian import HamiltonianSystem
 from neurosim.classical.integrators import (
+    adaptive_rk45,
     euler,
     leapfrog,
     rk4,
@@ -191,6 +192,7 @@ __all__ = [
     "stormer_verlet",
     "yoshida4",
     "rk4",
+    "adaptive_rk45",
     # EM
     "EMGrid",
     "PlaneWave",
