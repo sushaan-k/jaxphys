@@ -147,21 +147,38 @@ class HamiltonianSystem:
             integrator,
         )
 
-        def scan_step(
-            carry: tuple[Array, Array, float],
-            _: None,
-        ) -> tuple[tuple[Array, Array, float], tuple[Array, Array, Array, Array]]:
-            q_c, p_c, t_c = carry
-            q_new, p_new, t_new = integrate_step(
-                self._deriv_fn, q_c, p_c, t_c, dt, params
-            )
-            e = self.energy(q_new, p_new, params)
-            return (q_new, p_new, t_new), (q_new, p_new, jnp.asarray(t_new), e)
+        # JIT-compile the full scan loop so repeated simulate() calls
+        # with the same shapes/dtypes skip JAX tracing entirely.
+        @jax.jit
+        def _run_scan(
+            q_init: Array, p_init: Array, t_init: float
+        ) -> tuple[Array, Array, Array, Array]:
+            def scan_step(
+                carry: tuple[Array, Array, float],
+                _: None,
+            ) -> tuple[
+                tuple[Array, Array, float],
+                tuple[Array, Array, Array, Array],
+            ]:
+                q_c, p_c, t_c = carry
+                q_new, p_new, t_new = integrate_step(
+                    self._deriv_fn, q_c, p_c, t_c, dt, params
+                )
+                e = self.energy(q_new, p_new, params)
+                return (q_new, p_new, t_new), (
+                    q_new,
+                    p_new,
+                    jnp.asarray(t_new),
+                    e,
+                )
 
-        init_carry = (q, p, t_start)
-        _, (q_hist, p_hist, t_hist, e_hist) = jax.lax.scan(
-            scan_step, init_carry, None, length=n_steps
-        )
+            init_carry = (q_init, p_init, t_init)
+            _, (q_h, p_h, t_h, e_h) = jax.lax.scan(
+                scan_step, init_carry, None, length=n_steps
+            )
+            return q_h, p_h, t_h, e_h
+
+        q_hist, p_hist, t_hist, e_hist = _run_scan(q, p, t_start)
 
         # Prepend initial state
         e0 = self.energy(q, p, params)
