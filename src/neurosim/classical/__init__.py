@@ -4,6 +4,10 @@ Provides Lagrangian and Hamiltonian mechanics, N-body simulation,
 rigid body dynamics, and symplectic integrators.
 """
 
+from neurosim.classical.coupled_oscillators import (
+    coupled_oscillators,
+    normal_mode_frequencies,
+)
 from neurosim.classical.hamiltonian import HamiltonianSystem
 from neurosim.classical.integrators import (
     adaptive_rk45,
@@ -24,6 +28,8 @@ __all__ = [
     "HamiltonianSystem",
     "NBody",
     "RigidBody",
+    "coupled_oscillators",
+    "normal_mode_frequencies",
     "euler",
     "symplectic_euler",
     "leapfrog",

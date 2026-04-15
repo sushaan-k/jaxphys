@@ -6,6 +6,10 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from neurosim.classical.coupled_oscillators import (
+    coupled_oscillators,
+    normal_mode_frequencies,
+)
 from neurosim.classical.hamiltonian import HamiltonianSystem
 from neurosim.classical.lagrangian import LagrangianSystem
 from neurosim.classical.nbody import NBody
@@ -359,3 +363,110 @@ class TestJITPerformance:
 
         # JIT second run should be faster
         assert second_run < first_run or second_run < 0.5
+
+
+class TestCoupledOscillators:
+    """Tests for the coupled oscillators convenience builder."""
+
+    def test_single_oscillator_frequency(self) -> None:
+        """A single mass-spring matches the exact omega = sqrt(k/m)."""
+        k, m = 4.0, 1.0
+        system = coupled_oscillators(1, k=k, m=m)
+        omega_exact = jnp.sqrt(k / m)  # = 2.0
+        period = float(2 * jnp.pi / omega_exact)
+
+        traj = system.simulate(
+            q0=[1.0],
+            qdot0=[0.0],
+            t_span=(0, period),
+            dt=0.001,
+            params=None,
+        )
+
+        # Should return to initial conditions after one period
+        assert traj.final_position[0] == pytest.approx(1.0, abs=1e-3)
+
+    def test_normal_mode_frequencies_vs_eigenvalues(self) -> None:
+        """Verify analytical frequencies match numerical eigenvalues of K/m."""
+        n, k, m = 3, 2.0, 0.5
+        freqs = normal_mode_frequencies(n, k=k, m=m)
+
+        # Build stiffness matrix for fixed-wall / free-end chain
+        K = jnp.zeros((n, n))
+        K = K.at[0, 0].set(2 * k)
+        for i in range(1, n):
+            K = K.at[i, i].set(2 * k)
+            K = K.at[i, i - 1].set(-k)
+            K = K.at[i - 1, i].set(-k)
+        K = K.at[n - 1, n - 1].set(k)  # free end
+
+        eigenvalues = jnp.sort(jnp.linalg.eigvalsh(K / m))
+        numerical_freqs = jnp.sqrt(eigenvalues)
+
+        for i in range(n):
+            assert float(freqs[i]) == pytest.approx(
+                float(numerical_freqs[i]), rel=1e-8
+            )
+
+    def test_energy_conservation(self) -> None:
+        """Coupled oscillator chain should conserve energy."""
+        system = coupled_oscillators(4, k=2.0, m=1.0)
+        traj = system.simulate(
+            q0=[0.5, 0.0, 0.0, 0.0],
+            qdot0=[0.0, 0.0, 0.0, 0.0],
+            t_span=(0, 20),
+            dt=0.001,
+            params=None,
+        )
+
+        assert traj.energy is not None
+        assert traj.energy_drift() < 1e-5
+
+    def test_normal_mode_excitation(self) -> None:
+        """Exciting a pure normal mode should oscillate at the predicted frequency."""
+        n = 3
+        k, m = 1.0, 1.0
+
+        freqs = normal_mode_frequencies(n, k=k, m=m)
+
+        # Build K matrix and get first eigenvector numerically
+        K = jnp.zeros((n, n))
+        K = K.at[0, 0].set(2 * k)
+        for i in range(1, n):
+            K = K.at[i, i].set(2 * k)
+            K = K.at[i, i - 1].set(-k)
+            K = K.at[i - 1, i].set(-k)
+        K = K.at[n - 1, n - 1].set(k)
+
+        _eigenvalues, eigenvectors = jnp.linalg.eigh(K / m)
+        mode_shape = eigenvectors[:, 0]  # lowest mode
+
+        amplitude = 0.1
+        q0 = amplitude * mode_shape
+
+        system = coupled_oscillators(n, k=k, m=m)
+        omega1 = float(freqs[0])
+        half_period = jnp.pi / omega1
+
+        # After half a period the mode should reverse sign
+        traj = system.simulate(
+            q0=q0.tolist(),
+            qdot0=[0.0] * n,
+            t_span=(0, float(half_period)),
+            dt=0.0005,
+            params=None,
+        )
+
+        # Position should be approximately -q0
+        for i in range(n):
+            assert traj.final_position[i] == pytest.approx(
+                float(-q0[i]), abs=0.01
+            )
+
+    def test_invalid_params(self) -> None:
+        with pytest.raises(ConfigurationError):
+            coupled_oscillators(0)
+        with pytest.raises(ConfigurationError):
+            coupled_oscillators(3, k=-1.0)
+        with pytest.raises(ConfigurationError):
+            coupled_oscillators(3, m=0.0)
