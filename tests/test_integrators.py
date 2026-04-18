@@ -141,17 +141,13 @@ class TestAdaptiveRK45:
         dt = 0.1
 
         q_rk4, p_rk4, _ = rk4(harmonic_deriv, q0, p0, 0.0, dt, None)
-        q_rk45, p_rk45, _ = adaptive_rk45(
-            harmonic_deriv, q0, p0, 0.0, dt, None
-        )
+        q_rk45, p_rk45, _ = adaptive_rk45(harmonic_deriv, q0, p0, 0.0, dt, None)
 
         exact_q = jnp.cos(dt)
         exact_p = -jnp.sin(dt)
 
         err_rk4 = float(jnp.abs(q_rk4[0] - exact_q) + jnp.abs(p_rk4[0] - exact_p))
-        err_rk45 = float(
-            jnp.abs(q_rk45[0] - exact_q) + jnp.abs(p_rk45[0] - exact_p)
-        )
+        err_rk45 = float(jnp.abs(q_rk45[0] - exact_q) + jnp.abs(p_rk45[0] - exact_p))
 
         # RK45 (5th-order) should beat RK4 (4th-order)
         assert err_rk45 < err_rk4

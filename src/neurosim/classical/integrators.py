@@ -443,12 +443,8 @@ def adaptive_rk45(
         k7q, k7p = deriv_fn(q5, p5, t + h, params)
 
         # Error: difference between 4th and 5th order
-        err_q = h * (
-            e1 * k1q + e3 * k3q + e4 * k4q + e5 * k5q + e6 * k6q + e7 * k7q
-        )
-        err_p = h * (
-            e1 * k1p + e3 * k3p + e4 * k4p + e5 * k5p + e6 * k6p + e7 * k7p
-        )
+        err_q = h * (e1 * k1q + e3 * k3q + e4 * k4q + e5 * k5q + e6 * k6q + e7 * k7q)
+        err_p = h * (e1 * k1p + e3 * k3p + e4 * k4p + e5 * k5p + e6 * k6p + e7 * k7p)
 
         # Scaled error norm
         scale_q = atol + rtol * _jnp.maximum(_jnp.abs(q), _jnp.abs(q5))

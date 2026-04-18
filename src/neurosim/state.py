@@ -129,6 +129,37 @@ class Trajectory:
                 f"exceeds tolerance {tolerance:.6e}"
             )
 
+    def diagnostics(self) -> dict[str, float]:
+        """Return a compact diagnostics summary for the trajectory.
+
+        The output is intentionally plain so it can be serialized easily in
+        examples, notebooks, and regression tests.
+        """
+        summary = {
+            "n_steps": float(self.n_steps),
+            "n_dof": float(self.n_dof),
+            "duration": self.duration,
+        }
+        if self.energy is None:
+            return summary
+
+        energy_min = float(jnp.min(self.energy))
+        energy_max = float(jnp.max(self.energy))
+        energy_mean = float(jnp.mean(self.energy))
+        summary.update(
+            {
+                "energy_initial": float(self.energy[0]),
+                "energy_final": float(self.energy[-1]),
+                "energy_min": energy_min,
+                "energy_max": energy_max,
+                "energy_mean": energy_mean,
+                "energy_span": energy_max - energy_min,
+                "energy_drift": self.energy_drift(),
+                "max_energy_drift": self.max_energy_drift(),
+            }
+        )
+        return summary
+
 
 @dataclass(frozen=True)
 class NBodyState:

@@ -82,7 +82,7 @@ def coupled_oscillators(
             diffs = q[1:] - q[:-1]
             V_springs = 0.5 * k * jnp.sum(diffs**2)
         else:
-            V_springs = 0.0
+            V_springs = jnp.array(0.0)
         V = V_wall + V_springs
 
         return T - V
@@ -112,6 +112,4 @@ def normal_mode_frequencies(
         Array of shape (n,) with frequencies sorted ascending.
     """
     j = jnp.arange(1, n + 1)
-    return 2.0 * jnp.sqrt(k / m) * jnp.sin(
-        (2 * j - 1) * jnp.pi / (4 * n + 2)
-    )
+    return 2.0 * jnp.sqrt(k / m) * jnp.sin((2 * j - 1) * jnp.pi / (4 * n + 2))
