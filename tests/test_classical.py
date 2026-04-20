@@ -257,6 +257,72 @@ class TestEnergyConservationDiagnostic:
         assert diagnostics["energy_drift"] == pytest.approx(0.1)
         assert diagnostics["max_energy_drift"] == pytest.approx(1.5)
 
+    def test_conservation_report(self) -> None:
+        from neurosim.state import Trajectory
+
+        traj = Trajectory(
+            t=jnp.array([0.0, 1.0]),
+            q=jnp.array([[0.0], [0.0]]),
+            p=jnp.array([[0.0], [0.0]]),
+            energy=jnp.array([1.0, 1.01]),
+        )
+
+        report = traj.conservation_report(tolerance=0.02)
+        assert report["tracked"] is True
+        assert report["passed"] is True
+        assert report["max_energy_drift"] == pytest.approx(0.01)
+
+        failed = traj.conservation_report(tolerance=0.001)
+        assert failed["passed"] is False
+
+    def test_conservation_report_without_energy_is_not_passed(self) -> None:
+        from neurosim.state import Trajectory
+
+        traj = Trajectory(
+            t=jnp.array([0.0, 1.0]),
+            q=jnp.array([[0.0], [0.0]]),
+            p=jnp.array([[0.0], [0.0]]),
+            energy=None,
+        )
+
+        report = traj.conservation_report(tolerance=1e-6)
+        assert report["tracked"] is False
+        assert report["passed"] is False
+        assert report["max_energy_drift"] == 0.0
+
+    def test_conservation_report_empty_energy_is_not_passed(self) -> None:
+        from neurosim.state import Trajectory
+
+        traj = Trajectory(
+            t=jnp.array([0.0]),
+            q=jnp.array([[0.0]]),
+            p=jnp.array([[0.0]]),
+            energy=jnp.array([]),
+        )
+
+        report = traj.conservation_report(tolerance=1e-6)
+        assert report["tracked"] is False
+        assert report["passed"] is False
+        assert report["max_energy_drift"] == 0.0
+        assert traj.energy_drift() == 0.0
+        assert traj.max_energy_drift() == 0.0
+
+    def test_conservation_report_single_energy_sample_passes(self) -> None:
+        from neurosim.state import Trajectory
+
+        traj = Trajectory(
+            t=jnp.array([0.0]),
+            q=jnp.array([[0.0]]),
+            p=jnp.array([[0.0]]),
+            energy=jnp.array([5.0]),
+        )
+
+        report = traj.conservation_report(tolerance=1e-6)
+        assert report["tracked"] is True
+        assert report["passed"] is True
+        assert report["max_energy_drift"] == 0.0
+        assert report["energy_drift"] == 0.0
+
 
 class TestHamiltonianSystem:
     """Tests for the Hamiltonian mechanics engine."""
