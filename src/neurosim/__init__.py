@@ -92,7 +92,15 @@ from neurosim.optics.ray_tracing import (
 )
 
 # Optimization
-from neurosim.optimize import optimize, projectile, sensitivity
+from neurosim.optimize import (
+    ParameterGrid,
+    ParameterSweepResult,
+    make_parameter_grid,
+    optimize,
+    parameter_sweep,
+    projectile,
+    sensitivity,
+)
 from neurosim.quantum.density_matrix import DensityMatrix, lindblad_evolve
 
 # Quantum mechanics
@@ -239,7 +247,11 @@ __all__ = [
     "double_slit",
     "circular_aperture",
     # Optimization
+    "ParameterGrid",
+    "ParameterSweepResult",
+    "make_parameter_grid",
     "optimize",
+    "parameter_sweep",
     "projectile",
     "sensitivity",
     # Visualization

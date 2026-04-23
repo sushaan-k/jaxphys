@@ -38,6 +38,7 @@ There's a massive gap for a **modern, GPU-accelerated, differentiable physics li
 - Split-operator Schrödinger equation solver (exactly unitary)
 - GPU-accelerated Ising model Monte Carlo with Metropolis and Wolff cluster updates
 - Gradient-based inverse problems — optimize through entire simulations
+- Vectorized parameter sweeps for coarse search before local optimization
 
 ## Benchmarks
 
@@ -102,6 +103,7 @@ print(f"Energy drift: {trajectory.energy_drift():.2e}")
 
 ```python
 import jax
+import jax.numpy as jnp
 
 # Find initial velocity to land a projectile at x=100
 def miss_distance(v0):
@@ -115,6 +117,21 @@ print(f"Range sensitivity: {d_range_dv0:.4f}")
 # Optimize through entire trajectory
 result = jp.optimize(miss_distance, initial_guess=10.0, learning_rate=0.001)
 print(f"Optimal v0: {result.x:.4f}")  # ~31.0 m/s
+
+# Coarse scan launch speed and angle before local refinement
+grid = jp.make_parameter_grid(
+    {
+        "v0": jnp.linspace(20.0, 45.0, 26),
+        "angle": jnp.linspace(25.0, 65.0, 17),
+    }
+)
+sweep = jp.parameter_sweep(
+    lambda params: jp.projectile(v0=params[0], angle=params[1]).range,
+    grid.values,
+    objective=lambda range_m: (range_m - 100.0) ** 2,
+    batch_size=64,
+)
+print(grid.as_dict(sweep.best_index), sweep.best_score)
 ```
 
 ### Quantum Tunneling
@@ -186,7 +203,7 @@ graph TD
 | `jaxphys.quantum` | Schrödinger equation, spin chains, density matrices | `solve_schrodinger`, `SpinChain`, `DensityMatrix` |
 | `jaxphys.statmech` | Ising model, Monte Carlo, Boltzmann statistics | `IsingLattice`, `boltzmann_distribution` |
 | `jaxphys.optics` | Geometric ray tracing, Fraunhofer diffraction | `ThinLens`, `single_slit`, `double_slit` |
-| `jaxphys.optimize` | Inverse problems, gradient-based optimization | `optimize`, `sensitivity` |
+| `jaxphys.optimize` | Inverse problems, gradient-based optimization, grid search | `optimize`, `sensitivity`, `parameter_sweep` |
 | `jaxphys.viz` | Phase space plots, animations, field visualization | `plot_phase_space`, `animate_pendulum` |
 
 ### Integrators

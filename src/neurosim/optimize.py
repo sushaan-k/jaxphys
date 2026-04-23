@@ -17,12 +17,15 @@ References:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
 import jax
 import jax.numpy as jnp
 from jax import Array
+
+from neurosim.exceptions import ConfigurationError
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,262 @@ class OptimizeResult:
     n_iterations: int
     converged: bool
     trajectory: Array | None = None
+
+
+@dataclass(frozen=True)
+class ParameterGrid:
+    """Cartesian parameter grid for reproducible simulation sweeps.
+
+    Attributes:
+        names: Parameter names in column order.
+        values: Grid values, shape ``(n_points, n_parameters)``.
+        axes: Original one-dimensional axis values by parameter name.
+    """
+
+    names: tuple[str, ...]
+    values: Array
+    axes: dict[str, Array]
+
+    @property
+    def n_points(self) -> int:
+        """Number of parameter combinations in the grid."""
+        return int(self.values.shape[0])
+
+    @property
+    def n_parameters(self) -> int:
+        """Number of named parameters per grid point."""
+        return int(self.values.shape[1])
+
+    def as_dict(self, index: int) -> dict[str, float]:
+        """Return one grid row as a plain ``dict`` of parameter values."""
+        row = self.values[index]
+        return {name: float(row[i]) for i, name in enumerate(self.names)}
+
+
+@dataclass(frozen=True)
+class ParameterSweepResult:
+    """Result of evaluating a simulation over a parameter grid.
+
+    Attributes:
+        parameters: Input parameters, shape ``(n_evaluations, ...)``.
+        values: Raw simulation outputs, first axis aligned to parameters.
+        scores: Scalar objective scores used for ranking.
+        minimize: Whether lower scores are considered better.
+        metadata: Optional caller-supplied context.
+    """
+
+    parameters: Array
+    values: Array
+    scores: Array
+    minimize: bool = True
+    metadata: dict[str, Any] | None = None
+
+    @property
+    def n_evaluations(self) -> int:
+        """Number of parameter points evaluated."""
+        return int(self.parameters.shape[0])
+
+    @property
+    def best_index(self) -> int:
+        """Index of the best-scoring parameter point."""
+        index = jnp.argmin(self.scores) if self.minimize else jnp.argmax(self.scores)
+        return int(index)
+
+    @property
+    def best_parameters(self) -> Array:
+        """Parameters for the best-scoring simulation."""
+        return self.parameters[self.best_index]
+
+    @property
+    def best_value(self) -> Array:
+        """Raw simulation output for the best-scoring parameter point."""
+        return self.values[self.best_index]
+
+    @property
+    def best_score(self) -> float:
+        """Best scalar objective score."""
+        return float(self.scores[self.best_index])
+
+    def top_k(self, k: int) -> dict[str, Array]:
+        """Return the top ``k`` ranked parameters, values, and scores."""
+        if k <= 0:
+            raise ConfigurationError("k must be positive")
+
+        n = min(k, self.n_evaluations)
+        order = jnp.argsort(self.scores)
+        if not self.minimize:
+            order = order[::-1]
+        indices = order[:n]
+        return {
+            "indices": indices,
+            "parameters": self.parameters[indices],
+            "values": self.values[indices],
+            "scores": self.scores[indices],
+        }
+
+    def summary(self) -> dict[str, Any]:
+        """Return a compact, serializable summary of the sweep."""
+        return {
+            "n_evaluations": self.n_evaluations,
+            "parameter_shape": tuple(int(dim) for dim in self.parameters.shape),
+            "value_shape": tuple(int(dim) for dim in self.values.shape),
+            "minimize": self.minimize,
+            "best_index": self.best_index,
+            "best_score": self.best_score,
+            "score_min": float(jnp.min(self.scores)),
+            "score_max": float(jnp.max(self.scores)),
+            "score_mean": float(jnp.mean(self.scores)),
+        }
+
+
+def make_parameter_grid(
+    axes: Mapping[str, Sequence[float] | Array],
+) -> ParameterGrid:
+    """Build a Cartesian grid from named one-dimensional parameter axes.
+
+    Example:
+        >>> grid = make_parameter_grid({
+        ...     "v0": jnp.linspace(20.0, 40.0, 5),
+        ...     "angle": [30.0, 45.0, 60.0],
+        ... })
+        >>> grid.values.shape
+        (15, 2)
+
+    Args:
+        axes: Mapping of parameter name to one-dimensional values.
+
+    Returns:
+        ``ParameterGrid`` with rows ordered by the mapping's insertion order.
+
+    Raises:
+        ConfigurationError: If no axes are provided, an axis is empty, or an
+            axis is not one-dimensional.
+    """
+    if not axes:
+        raise ConfigurationError("At least one parameter axis is required")
+
+    names = tuple(axes.keys())
+    axis_arrays: dict[str, Array] = {}
+    for name in names:
+        values = jnp.asarray(axes[name], dtype=jnp.float64)
+        if values.ndim != 1:
+            raise ConfigurationError(f"Parameter axis '{name}' must be one-dimensional")
+        if int(values.shape[0]) == 0:
+            raise ConfigurationError(f"Parameter axis '{name}' must not be empty")
+        axis_arrays[name] = values
+
+    meshes = jnp.meshgrid(*(axis_arrays[name] for name in names), indexing="ij")
+    values = jnp.stack([mesh.reshape(-1) for mesh in meshes], axis=-1)
+    return ParameterGrid(names=names, values=values, axes=axis_arrays)
+
+
+def parameter_sweep(
+    simulation_fn: Callable[[Array], Array],
+    parameters: Sequence[float] | Sequence[Sequence[float]] | Array,
+    *,
+    objective: Callable[[Array], Array] | None = None,
+    minimize: bool = True,
+    vectorized: bool = True,
+    batch_size: int | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> ParameterSweepResult:
+    """Evaluate a simulation over candidate parameters and rank results.
+
+    ``parameter_sweep`` is useful before gradient optimization, when mapping a
+    stable basin or comparing solver settings matters more than following one
+    local gradient. Inputs can be a one-dimensional list of scalar parameters or
+    a two-dimensional array where each row is a parameter vector.
+
+    Args:
+        simulation_fn: Function mapping one parameter point to a JAX array.
+        parameters: Parameter candidates. The leading axis enumerates trials.
+        objective: Optional function mapping one simulation output to a scalar
+            score. If omitted, each simulation output must already be scalar.
+        minimize: Whether lower scores are better. Set ``False`` to maximize.
+        vectorized: Use ``jax.vmap`` for evaluation. Set ``False`` for
+            debugging functions with Python-side effects.
+        batch_size: Optional chunk size for large vectorized sweeps.
+        metadata: Optional caller-supplied context copied into the result.
+
+    Returns:
+        ``ParameterSweepResult`` with raw outputs, scalar scores, and helpers
+        for best/top-k inspection.
+
+    Raises:
+        ConfigurationError: If parameters are empty, batch size is invalid, or
+            outputs/objective scores are not scalar per evaluation.
+    """
+    parameter_array = jnp.asarray(parameters, dtype=jnp.float64)
+    if parameter_array.ndim == 0:
+        parameter_array = parameter_array.reshape(1)
+    if int(parameter_array.shape[0]) == 0:
+        raise ConfigurationError("Parameter sweep requires at least one candidate")
+    if batch_size is not None and batch_size <= 0:
+        raise ConfigurationError("batch_size must be positive")
+
+    values = _evaluate_sweep(
+        simulation_fn=simulation_fn,
+        parameters=parameter_array,
+        vectorized=vectorized,
+        batch_size=batch_size,
+    )
+    scores = _score_sweep_values(values, objective=objective, vectorized=vectorized)
+    return ParameterSweepResult(
+        parameters=parameter_array,
+        values=values,
+        scores=scores,
+        minimize=minimize,
+        metadata=metadata,
+    )
+
+
+def _evaluate_sweep(
+    simulation_fn: Callable[[Array], Array],
+    parameters: Array,
+    *,
+    vectorized: bool,
+    batch_size: int | None,
+) -> Array:
+    """Evaluate a sweep in one vectorized call or in bounded chunks."""
+    if not vectorized:
+        return jnp.stack([jnp.asarray(simulation_fn(point)) for point in parameters])
+
+    batched_fn = jax.vmap(simulation_fn)
+    if batch_size is None or batch_size >= int(parameters.shape[0]):
+        return batched_fn(parameters)
+
+    chunks = []
+    for start in range(0, int(parameters.shape[0]), batch_size):
+        stop = min(start + batch_size, int(parameters.shape[0]))
+        chunks.append(batched_fn(parameters[start:stop]))
+    return jnp.concatenate(chunks, axis=0)
+
+
+def _score_sweep_values(
+    values: Array,
+    *,
+    objective: Callable[[Array], Array] | None,
+    vectorized: bool,
+) -> Array:
+    """Convert raw simulation outputs into one scalar score per trial."""
+    if objective is None:
+        scores = values
+    elif vectorized:
+        scores = jax.vmap(objective)(values)
+    else:
+        scores = jnp.stack([jnp.asarray(objective(value)) for value in values])
+
+    if scores.ndim == 0:
+        scores = scores.reshape(1)
+    if scores.ndim != 1:
+        raise ConfigurationError(
+            "Parameter sweep objective must return one scalar score per candidate"
+        )
+    if int(scores.shape[0]) != int(values.shape[0]):
+        raise ConfigurationError(
+            "Parameter sweep scores must align with the number of outputs"
+        )
+    return scores
 
 
 def optimize(
