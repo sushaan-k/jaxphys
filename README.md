@@ -132,6 +132,18 @@ sweep = jp.parameter_sweep(
     batch_size=64,
 )
 print(grid.as_dict(sweep.best_index), sweep.best_score)
+
+def objective(params):
+    return (jp.projectile(v0=params[0], angle=params[1]).range - 100.0) ** 2
+
+refined = jp.refine_parameter_sweep(
+    objective,
+    sweep,
+    top_k=3,
+    learning_rate=0.01,
+    max_iterations=500,
+)
+print(refined.best_parameters, refined.best_score)
 ```
 
 ### Quantum Tunneling
@@ -203,7 +215,7 @@ graph TD
 | `jaxphys.quantum` | Schrödinger equation, spin chains, density matrices | `solve_schrodinger`, `SpinChain`, `DensityMatrix` |
 | `jaxphys.statmech` | Ising model, Monte Carlo, Boltzmann statistics | `IsingLattice`, `boltzmann_distribution` |
 | `jaxphys.optics` | Geometric ray tracing, Fraunhofer diffraction | `ThinLens`, `single_slit`, `double_slit` |
-| `jaxphys.optimize` | Inverse problems, gradient-based optimization, grid search | `optimize`, `sensitivity`, `parameter_sweep` |
+| `jaxphys.optimize` | Inverse problems, gradient-based optimization, grid search | `optimize`, `sensitivity`, `parameter_sweep`, `refine_parameter_sweep` |
 | `jaxphys.viz` | Phase space plots, animations, field visualization | `plot_phase_space`, `animate_pendulum` |
 
 ### Integrators

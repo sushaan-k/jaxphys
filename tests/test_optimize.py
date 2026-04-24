@@ -6,7 +6,13 @@ import pytest
 
 import neurosim as ns
 from neurosim.exceptions import ConfigurationError
-from neurosim.optimize import make_parameter_grid, optimize, parameter_sweep, projectile
+from neurosim.optimize import (
+    make_parameter_grid,
+    optimize,
+    parameter_sweep,
+    projectile,
+    refine_parameter_sweep,
+)
 
 jax.config.update("jax_enable_x64", True)
 
@@ -186,3 +192,82 @@ class TestParameterSweep:
         assert ns.make_parameter_grid is make_parameter_grid
         assert ns.ParameterGrid.__name__ == "ParameterGrid"
         assert ns.ParameterSweepResult.__name__ == "ParameterSweepResult"
+        assert ns.refine_parameter_sweep is refine_parameter_sweep
+        assert ns.RefinedSweepCandidate.__name__ == "RefinedSweepCandidate"
+        assert ns.SweepRefinementResult.__name__ == "SweepRefinementResult"
+
+
+class TestSweepRefinement:
+    """Tests for coarse-to-local optimization workflows."""
+
+    def test_refine_parameter_sweep_improves_coarse_grid_seed(self) -> None:
+        """Local refinement should improve the best coarse grid basin."""
+
+        target = jnp.array([1.25, -0.75])
+
+        def objective(params):
+            return jnp.sum((params - target) ** 2)
+
+        grid = make_parameter_grid(
+            {
+                "x": jnp.array([-2.0, 0.0, 2.0]),
+                "y": jnp.array([-2.0, 0.0, 2.0]),
+            }
+        )
+        sweep = parameter_sweep(objective, grid.values)
+        refined = refine_parameter_sweep(
+            objective,
+            sweep,
+            top_k=3,
+            learning_rate=0.2,
+            max_iterations=200,
+            tolerance=1e-10,
+        )
+
+        assert refined.n_refinements == 3
+        assert refined.best_score < sweep.best_score
+        assert refined.best_candidate.improvement > 0.0
+        assert refined.best_candidate.result.converged
+        assert jnp.allclose(refined.best_parameters, target, atol=1e-4)
+        assert refined.summary()["best_refined_score"] == pytest.approx(
+            refined.best_score
+        )
+
+    def test_refine_parameter_sweep_keeps_candidate_metadata(self) -> None:
+        """Refinement should preserve seeds and sort by refined objective."""
+
+        def objective(x):
+            return (x - 1.0) ** 2
+
+        sweep = parameter_sweep(objective, jnp.array([-3.0, 0.0, 4.0]))
+        refined = refine_parameter_sweep(
+            objective,
+            sweep,
+            top_k=2,
+            learning_rate=0.1,
+            max_iterations=100,
+            track_trajectory=True,
+        )
+
+        assert refined.best_candidate.initial_parameters.shape == ()
+        assert refined.best_candidate.result.trajectory is not None
+        assert (
+            refined.candidates[0].refined_score <= refined.candidates[1].refined_score
+        )
+        assert refined.summary()["n_refinements"] == 2
+
+    def test_refine_parameter_sweep_rejects_invalid_top_k(self) -> None:
+        """Invalid refinement requests should fail with domain errors."""
+
+        sweep = parameter_sweep(lambda x: x**2, jnp.array([1.0, 2.0]))
+
+        with pytest.raises(ConfigurationError, match="top_k must be positive"):
+            refine_parameter_sweep(lambda x: x**2, sweep, top_k=0)
+
+    def test_refine_parameter_sweep_rejects_maximization_sweeps(self) -> None:
+        """Refinement should not silently minimize a reward function."""
+
+        sweep = parameter_sweep(lambda x: x, jnp.array([1.0, 2.0]), minimize=False)
+
+        with pytest.raises(ConfigurationError, match="minimization sweep"):
+            refine_parameter_sweep(lambda x: x, sweep)

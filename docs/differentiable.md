@@ -15,6 +15,7 @@ These parts of the library are intended for automatic differentiation:
 - `neurosim.optimize.optimize`
 - `neurosim.optimize.sensitivity`
 - `neurosim.optimize.parameter_sweep`
+- `neurosim.optimize.refine_parameter_sweep`
 - `neurosim.quantum.solve_schrodinger`
 - `neurosim.quantum.solve_eigenvalue_problem`
 - `neurosim.optics` routines that map parameters to smooth field values
@@ -70,10 +71,44 @@ print(result.summary())
 `parameter_sweep` uses `jax.vmap` by default, supports chunked evaluation with
 `batch_size`, and can maximize scores by passing `minimize=False`.
 
+When the grid identifies a promising basin but not a precise optimum, refine
+the best sweep seeds with local gradient descent:
+
+```python
+import jax.numpy as jnp
+import neurosim as ns
+
+grid = ns.make_parameter_grid(
+    {
+        "v0": jnp.linspace(20.0, 60.0, 21),
+        "angle": jnp.linspace(25.0, 65.0, 17),
+    }
+)
+
+target = 120.0
+
+def objective(params):
+    return (ns.projectile(v0=params[0], angle=params[1]).range - target) ** 2
+
+sweep = ns.parameter_sweep(objective, grid.values, batch_size=64)
+refined = ns.refine_parameter_sweep(
+    objective,
+    sweep,
+    top_k=3,
+    learning_rate=0.01,
+    max_iterations=500,
+)
+
+print(refined.best_parameters)
+print(refined.summary())
+```
+
 ## Caveats
 
 - Randomized Monte Carlo updates, such as Ising sampling, are meant for
   statistics and visualization, not gradient descent.
+- `refine_parameter_sweep` requires a minimization sweep, so negate the reward
+  objective before sweeping and refining a maximization search.
 - Long-running simulations may still need parameter tuning for stable
   gradients, especially when the objective is poorly conditioned.
 - `jax_enable_x64` is enabled at import time to improve numerical

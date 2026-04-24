@@ -155,6 +155,84 @@ class ParameterSweepResult:
         }
 
 
+@dataclass(frozen=True)
+class RefinedSweepCandidate:
+    """One local optimization run started from a sweep candidate.
+
+    Attributes:
+        initial_parameters: Parameter values selected from the coarse sweep.
+        initial_score: Coarse sweep score for the selected point.
+        result: Local optimizer result started from ``initial_parameters``.
+    """
+
+    initial_parameters: Array
+    initial_score: float
+    result: OptimizeResult
+
+    @property
+    def refined_parameters(self) -> Array:
+        """Parameters returned by the local optimizer."""
+        return self.result.x
+
+    @property
+    def refined_score(self) -> float:
+        """Objective value returned by the local optimizer."""
+        return self.result.fun
+
+    @property
+    def improvement(self) -> float:
+        """Positive value when refinement lowered the objective."""
+        return self.initial_score - self.refined_score
+
+
+@dataclass(frozen=True)
+class SweepRefinementResult:
+    """Local optimization results seeded by a coarse parameter sweep.
+
+    Attributes:
+        sweep: Original coarse sweep used to choose starting points.
+        candidates: Refined candidates sorted by final objective value.
+    """
+
+    sweep: ParameterSweepResult
+    candidates: tuple[RefinedSweepCandidate, ...]
+
+    @property
+    def n_refinements(self) -> int:
+        """Number of local optimization runs performed."""
+        return len(self.candidates)
+
+    @property
+    def best_candidate(self) -> RefinedSweepCandidate:
+        """Best local refinement by final objective value."""
+        if not self.candidates:
+            raise ConfigurationError("Sweep refinement result has no candidates")
+        return self.candidates[0]
+
+    @property
+    def best_parameters(self) -> Array:
+        """Best refined parameters."""
+        return self.best_candidate.refined_parameters
+
+    @property
+    def best_score(self) -> float:
+        """Best refined objective value."""
+        return self.best_candidate.refined_score
+
+    def summary(self) -> dict[str, Any]:
+        """Return a compact, serializable summary of the refinement."""
+        best = self.best_candidate
+        return {
+            "n_refinements": self.n_refinements,
+            "sweep_best_score": self.sweep.best_score,
+            "best_initial_score": best.initial_score,
+            "best_refined_score": best.refined_score,
+            "best_improvement": best.improvement,
+            "best_converged": best.result.converged,
+            "best_iterations": best.result.n_iterations,
+        }
+
+
 def make_parameter_grid(
     axes: Mapping[str, Sequence[float] | Array],
 ) -> ParameterGrid:
@@ -254,6 +332,79 @@ def parameter_sweep(
         minimize=minimize,
         metadata=metadata,
     )
+
+
+def refine_parameter_sweep(
+    objective: Callable[[Array], Array],
+    sweep: ParameterSweepResult,
+    *,
+    top_k: int = 1,
+    learning_rate: float = 0.01,
+    max_iterations: int = 1000,
+    tolerance: float = 1e-8,
+    method: str = "gradient_descent",
+    track_trajectory: bool = False,
+) -> SweepRefinementResult:
+    """Refine the best coarse sweep candidates with local optimization.
+
+    This helper implements the common global-to-local workflow: first map a
+    broad parameter space with ``parameter_sweep``, then run gradient descent
+    from the best basin or basins. The ``objective`` should be the scalar
+    minimization objective over one parameter point.
+
+    Args:
+        objective: Differentiable scalar objective accepting one parameter
+            point, shaped like a single row from ``sweep.parameters``.
+        sweep: Coarse parameter sweep result used to select starting points.
+        top_k: Number of ranked sweep candidates to refine.
+        learning_rate: Step size passed to ``optimize``.
+        max_iterations: Maximum local optimization iterations.
+        tolerance: Gradient norm convergence threshold.
+        method: Optimizer method passed to ``optimize``.
+        track_trajectory: Whether each local optimizer records its trajectory.
+
+    Returns:
+        ``SweepRefinementResult`` with refined candidates sorted by final
+        objective value.
+
+    Raises:
+        ConfigurationError: If ``top_k`` is not positive, or if ``sweep`` was
+            ranked as a maximization search.
+    """
+    if top_k <= 0:
+        raise ConfigurationError("top_k must be positive")
+    if not sweep.minimize:
+        raise ConfigurationError(
+            "refine_parameter_sweep requires a minimization sweep; "
+            "negate reward objectives before sweeping and refining"
+        )
+
+    ranked = sweep.top_k(top_k)
+    parameters = ranked["parameters"]
+    scores = ranked["scores"]
+
+    candidates: list[RefinedSweepCandidate] = []
+    for index in range(int(parameters.shape[0])):
+        seed = parameters[index]
+        result = optimize(
+            objective,
+            initial_guess=seed,
+            learning_rate=learning_rate,
+            max_iterations=max_iterations,
+            tolerance=tolerance,
+            method=method,
+            track_trajectory=track_trajectory,
+        )
+        candidates.append(
+            RefinedSweepCandidate(
+                initial_parameters=seed,
+                initial_score=float(scores[index]),
+                result=result,
+            )
+        )
+
+    candidates.sort(key=lambda candidate: candidate.refined_score)
+    return SweepRefinementResult(sweep=sweep, candidates=tuple(candidates))
 
 
 def _evaluate_sweep(

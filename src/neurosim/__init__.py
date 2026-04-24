@@ -95,10 +95,13 @@ from neurosim.optics.ray_tracing import (
 from neurosim.optimize import (
     ParameterGrid,
     ParameterSweepResult,
+    RefinedSweepCandidate,
+    SweepRefinementResult,
     make_parameter_grid,
     optimize,
     parameter_sweep,
     projectile,
+    refine_parameter_sweep,
     sensitivity,
 )
 from neurosim.quantum.density_matrix import DensityMatrix, lindblad_evolve
@@ -249,10 +252,13 @@ __all__ = [
     # Optimization
     "ParameterGrid",
     "ParameterSweepResult",
+    "RefinedSweepCandidate",
+    "SweepRefinementResult",
     "make_parameter_grid",
     "optimize",
     "parameter_sweep",
     "projectile",
+    "refine_parameter_sweep",
     "sensitivity",
     # Visualization
     "plot_phase_space",
