@@ -3,6 +3,7 @@
 import jax
 import jax.numpy as jnp
 import pytest
+from pydantic import ValidationError
 
 from neurosim.exceptions import ConfigurationError
 from neurosim.fluids.lbm import D2Q9, LBMGrid, Obstacle
@@ -90,7 +91,7 @@ class TestLBMGrid:
 
     def test_low_viscosity_error(self) -> None:
         """Viscosity that makes tau <= 0.5 should raise error."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             LBMGrid(size=(20, 20), viscosity=-0.1)
 
     def test_obstacle_shape_mismatch(self) -> None:
@@ -106,9 +107,7 @@ class TestNavierStokesSolver:
     def test_basic_simulation(self) -> None:
         """Navier-Stokes solver should run without errors."""
         solver = NavierStokesSolver(size=(20, 20), viscosity=0.01)
-        result = solver.simulate(
-            n_steps=100, dt=0.01, lid_velocity=0.5, save_every=50
-        )
+        result = solver.simulate(n_steps=100, dt=0.01, lid_velocity=0.5, save_every=50)
 
         assert result.ux.shape[1] == 20
         assert result.ux.shape[2] == 20
@@ -117,9 +116,7 @@ class TestNavierStokesSolver:
     def test_lid_velocity_on_boundary(self) -> None:
         """Top boundary should have the lid velocity."""
         solver = NavierStokesSolver(size=(20, 20), viscosity=0.01)
-        result = solver.simulate(
-            n_steps=100, dt=0.01, lid_velocity=1.0, save_every=50
-        )
+        result = solver.simulate(n_steps=100, dt=0.01, lid_velocity=1.0, save_every=50)
         # Top wall ux should be lid_velocity
         top_ux = result.ux[-1, :, -1]
         assert jnp.allclose(top_ux, 1.0)
@@ -127,9 +124,7 @@ class TestNavierStokesSolver:
     def test_no_slip_walls(self) -> None:
         """Bottom and side walls should have zero velocity."""
         solver = NavierStokesSolver(size=(20, 20), viscosity=0.01)
-        result = solver.simulate(
-            n_steps=100, dt=0.01, lid_velocity=1.0, save_every=50
-        )
+        result = solver.simulate(n_steps=100, dt=0.01, lid_velocity=1.0, save_every=50)
         # Bottom wall
         assert jnp.allclose(result.ux[-1, :, 0], 0.0)
         # Left wall vy
