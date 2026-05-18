@@ -86,10 +86,11 @@ class Trajectory:
             Relative change in energy: |E_final - E_initial| / |E_initial|.
             Returns 0.0 if energy was not tracked.
         """
-        if self.energy is None:
+        energy = self._energy_samples()
+        if energy is None:
             return 0.0
-        e0 = self.energy[0]
-        ef = self.energy[-1]
+        e0 = energy[0]
+        ef = energy[-1]
         if jnp.abs(e0) < 1e-15:
             return float(jnp.abs(ef - e0))
         return float(jnp.abs((ef - e0) / e0))
@@ -104,9 +105,10 @@ class Trajectory:
         Returns:
             max_t |E(t) - E(0)|.  Returns 0.0 if energy was not tracked.
         """
-        if self.energy is None:
+        energy = self._energy_samples()
+        if energy is None:
             return 0.0
-        return float(jnp.max(jnp.abs(self.energy - self.energy[0])))
+        return float(jnp.max(jnp.abs(energy - energy[0])))
 
     def check_conservation(self, tolerance: float) -> None:
         """Assert that maximum absolute energy drift stays within *tolerance*.
@@ -140,16 +142,17 @@ class Trajectory:
             "n_dof": float(self.n_dof),
             "duration": self.duration,
         }
-        if self.energy is None:
+        energy = self._energy_samples()
+        if energy is None:
             return summary
 
-        energy_min = float(jnp.min(self.energy))
-        energy_max = float(jnp.max(self.energy))
-        energy_mean = float(jnp.mean(self.energy))
+        energy_min = float(jnp.min(energy))
+        energy_max = float(jnp.max(energy))
+        energy_mean = float(jnp.mean(energy))
         summary.update(
             {
-                "energy_initial": float(self.energy[0]),
-                "energy_final": float(self.energy[-1]),
+                "energy_initial": float(energy[0]),
+                "energy_final": float(energy[-1]),
                 "energy_min": energy_min,
                 "energy_max": energy_max,
                 "energy_mean": energy_mean,
@@ -159,6 +162,32 @@ class Trajectory:
             }
         )
         return summary
+
+    def conservation_report(self, tolerance: float) -> dict[str, float | bool]:
+        """Return energy-conservation status without raising."""
+        if self._energy_samples() is None:
+            return {
+                "tracked": False,
+                "passed": False,
+                "tolerance": tolerance,
+                "max_energy_drift": 0.0,
+                "energy_drift": 0.0,
+            }
+
+        max_drift = self.max_energy_drift()
+        return {
+            "tracked": True,
+            "passed": max_drift <= tolerance,
+            "tolerance": tolerance,
+            "max_energy_drift": max_drift,
+            "energy_drift": self.energy_drift(),
+        }
+
+    def _energy_samples(self) -> Array | None:
+        """Return usable energy samples, or ``None`` when energy is untracked."""
+        if self.energy is None or int(self.energy.size) == 0:
+            return None
+        return self.energy
 
 
 @dataclass(frozen=True)
