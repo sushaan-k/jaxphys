@@ -145,9 +145,7 @@ class TestEnergyConservationDiagnostic:
         )
 
         # max drift over the full trajectory >= simple endpoint drift
-        assert traj.max_energy_drift() >= abs(
-            float(traj.energy[-1] - traj.energy[0])
-        )
+        assert traj.max_energy_drift() >= abs(float(traj.energy[-1] - traj.energy[0]))
 
     def test_check_conservation_passes(self) -> None:
         """check_conservation should not raise for a well-behaved sim."""
@@ -198,6 +196,66 @@ class TestEnergyConservationDiagnostic:
         assert traj.max_energy_drift() == 0.0
         # check_conservation should also be safe
         traj.check_conservation(tolerance=1e-10)
+
+    def test_diagnostics_with_energy(self) -> None:
+        """diagnostics should expose drift and summary stats."""
+
+        def H(q, p, params):
+            return p[0] ** 2 / 2 + q[0] ** 2 / 2
+
+        system = HamiltonianSystem(H, n_dof=1)
+        traj = system.simulate(
+            q0=[1.0],
+            p0=[0.0],
+            t_span=(0, 5),
+            dt=0.01,
+            params=Params(),
+            integrator="leapfrog",
+        )
+
+        diagnostics = traj.diagnostics()
+        assert diagnostics["n_steps"] > 0
+        assert diagnostics["duration"] == pytest.approx(5.0, abs=0.05)
+        assert diagnostics["energy_span"] >= 0.0
+        assert diagnostics["max_energy_drift"] >= 0.0
+        assert diagnostics["energy_drift"] >= 0.0
+
+    def test_diagnostics_without_energy(self) -> None:
+        """diagnostics should remain useful when energy is not tracked."""
+        from neurosim.state import Trajectory
+
+        traj = Trajectory(
+            t=jnp.array([0.0, 1.0, 2.0]),
+            q=jnp.array([[0.0], [1.0], [2.0]]),
+            p=jnp.array([[0.0], [0.5], [1.0]]),
+            energy=None,
+        )
+
+        diagnostics = traj.diagnostics()
+        assert diagnostics["n_steps"] == 3.0
+        assert diagnostics["n_dof"] == 1.0
+        assert "energy_span" not in diagnostics
+
+    def test_diagnostics_exact_energy_summary(self) -> None:
+        """diagnostics should report exact summary values for known energies."""
+        from neurosim.state import Trajectory
+
+        traj = Trajectory(
+            t=jnp.array([0.0, 0.5, 1.0]),
+            q=jnp.array([[0.0], [0.1], [0.2]]),
+            p=jnp.array([[1.0], [0.9], [0.8]]),
+            energy=jnp.array([10.0, 11.5, 9.0]),
+        )
+
+        diagnostics = traj.diagnostics()
+        assert diagnostics["energy_initial"] == pytest.approx(10.0)
+        assert diagnostics["energy_final"] == pytest.approx(9.0)
+        assert diagnostics["energy_min"] == pytest.approx(9.0)
+        assert diagnostics["energy_max"] == pytest.approx(11.5)
+        assert diagnostics["energy_mean"] == pytest.approx(10.1666666667)
+        assert diagnostics["energy_span"] == pytest.approx(2.5)
+        assert diagnostics["energy_drift"] == pytest.approx(0.1)
+        assert diagnostics["max_energy_drift"] == pytest.approx(1.5)
 
 
 class TestHamiltonianSystem:
@@ -404,9 +462,7 @@ class TestCoupledOscillators:
         numerical_freqs = jnp.sqrt(eigenvalues)
 
         for i in range(n):
-            assert float(freqs[i]) == pytest.approx(
-                float(numerical_freqs[i]), rel=1e-8
-            )
+            assert float(freqs[i]) == pytest.approx(float(numerical_freqs[i]), rel=1e-8)
 
     def test_energy_conservation(self) -> None:
         """Coupled oscillator chain should conserve energy."""
@@ -459,9 +515,7 @@ class TestCoupledOscillators:
 
         # Position should be approximately -q0
         for i in range(n):
-            assert traj.final_position[i] == pytest.approx(
-                float(-q0[i]), abs=0.01
-            )
+            assert traj.final_position[i] == pytest.approx(float(-q0[i]), abs=0.01)
 
     def test_invalid_params(self) -> None:
         with pytest.raises(ConfigurationError):
