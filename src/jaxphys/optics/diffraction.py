@@ -155,7 +155,9 @@ def circular_aperture(
     I(theta) = I_0 * [2 * J_1(x) / x]^2
     where x = pi * D * sin(theta) / lambda
 
-    Uses a polynomial approximation to J_1 for JAX compatibility.
+    J_1 is evaluated with rational/asymptotic approximations accurate to
+    ~1e-8 for all arguments (the Airy argument reaches hundreds for
+    millimetre apertures at optical wavelengths).
 
     Args:
         diameter: Aperture diameter in meters.
@@ -172,30 +174,67 @@ def circular_aperture(
     theta = jnp.linspace(-theta_max, theta_max, n_points)
     x = jnp.pi * diameter * jnp.sin(theta) / wavelength
 
-    # Bessel J_1 approximation using series expansion
-    # J_1(z) = z/2 - z^3/16 + z^5/384 - z^7/18432 + ...
-    # For small x, use series; for larger x, use jnp.
-    # JAX doesn't have jnp.j1, so we use the series for moderate x.
-    def j1_approx(z: Array) -> Array:
-        """Bessel J_1 via power series (converges for |z| < ~15)."""
-        result = jnp.zeros_like(z)
-        term = z / 2.0
-        result = result + term
-        for k in range(1, 20):
-            term = term * (-(z**2)) / (4.0 * k * (k + 1))
-            result = result + term
-        return result
+    j1 = _bessel_j1(x)
 
-    j1 = j1_approx(x)
-
-    intensity = jnp.where(
-        jnp.abs(x) < 1e-15,
-        1.0,
-        (2.0 * j1 / x) ** 2,
-    )
+    safe_x = jnp.where(jnp.abs(x) < 1e-15, 1.0, x)
+    intensity = jnp.where(jnp.abs(x) < 1e-15, 1.0, (2.0 * j1 / safe_x) ** 2)
 
     return DiffractionResult(
         theta=theta,
         intensity=intensity,
         wavelength=wavelength,
     )
+
+
+def _bessel_j1(x: Array) -> Array:
+    """Bessel function of the first kind, order one.
+
+    Rational approximation for |x| < 8 and the Hankel asymptotic form for
+    |x| >= 8 (Numerical Recipes, 3rd ed., section 6.5); absolute error is
+    below 1e-8 everywhere. A truncated power series is unusable here: it
+    diverges catastrophically for |x| >~ 20.
+    """
+    ax = jnp.abs(x)
+    y = x * x
+    small = (
+        x
+        * (
+            72362614232.0
+            + y
+            * (
+                -7895059235.0
+                + y
+                * (
+                    242396853.1
+                    + y * (-2972611.439 + y * (15704.48260 + y * (-30.16036606)))
+                )
+            )
+        )
+        / (
+            144725228442.0
+            + y
+            * (
+                2300535178.0
+                + y * (18583304.74 + y * (99447.43394 + y * (376.9991397 + y)))
+            )
+        )
+    )
+
+    big_x = jnp.where(ax < 8.0, 8.0, ax)  # keep the unused branch finite
+    z = 8.0 / big_x
+    z2 = z * z
+    xx = big_x - 2.356194491
+    p1 = 1.0 + z2 * (
+        0.183105e-2
+        + z2 * (-0.3516396496e-4 + z2 * (0.2457520174e-5 + z2 * (-0.240337019e-6)))
+    )
+    q1 = 0.04687499995 + z2 * (
+        -0.2002690873e-3
+        + z2 * (0.8449199096e-5 + z2 * (-0.88228987e-6 + z2 * 0.105787412e-6))
+    )
+    large = (
+        jnp.sign(x)
+        * jnp.sqrt(0.636619772 / big_x)
+        * (jnp.cos(xx) * p1 - z * jnp.sin(xx) * q1)
+    )
+    return jnp.where(ax < 8.0, small, large)

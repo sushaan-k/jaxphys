@@ -9,8 +9,8 @@ Implements the Heisenberg model:
 where Sx, Sy, Sz are the Pauli spin-1/2 operators and the sums
 run over nearest-neighbor pairs on a 1D chain.
 
-The Hilbert space dimension is 2^N, so exact methods are limited
-to chains of length N ~ 20.
+The Hilbert space dimension is 2^N and the Hamiltonian is diagonalized as
+a dense matrix, so chains are limited to N <= 14 (a 16384 x 16384 matrix).
 
 References:
     - Sachdev. "Quantum Phase Transitions" (2011)
@@ -22,51 +22,26 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
 
 from jaxphys.exceptions import ConfigurationError
 
 logger = logging.getLogger(__name__)
 
-# Determine complex dtype based on x64 mode
-_X64_ENABLED = bool(getattr(jax.config, "jax_enable_x64", False))
-_COMPLEX_DTYPE = jnp.complex128 if _X64_ENABLED else jnp.complex64
+_MAX_SITES = 14
 
 
-def _pauli_matrices() -> tuple[Array, Array, Array, Array]:
-    """Construct Pauli matrices using the current dtype setting."""
-    dtype = jnp.complex128 if _X64_ENABLED else jnp.complex64
-    sx = jnp.array([[0.0, 1.0], [1.0, 0.0]], dtype=dtype)
-    sy = jnp.array([[0.0, -1j], [1j, 0.0]], dtype=dtype)
-    sz = jnp.array([[1.0, 0.0], [0.0, -1.0]], dtype=dtype)
-    ident = jnp.eye(2, dtype=dtype)
-    return sx, sy, sz, ident
+def _spin_z(n_sites: int) -> np.ndarray:
+    """Pauli-z eigenvalues ``z[s, i]`` of site ``i`` in basis state ``s``.
 
-
-# Module-level references (will be recomputed if needed)
-SIGMA_X, SIGMA_Y, SIGMA_Z, IDENTITY_2 = _pauli_matrices()
-
-
-def _tensor_product_operator(op: Array, site: int, n_sites: int) -> Array:
-    """Embed a single-site operator into the full Hilbert space.
-
-    Constructs I_1 (x) ... (x) op_site (x) ... (x) I_N.
-
-    Args:
-        op: Single-site operator, shape (2, 2).
-        site: Site index (0-based).
-        n_sites: Total number of sites.
-
-    Returns:
-        Full-space operator, shape (2^N, 2^N).
+    Site 0 is the most significant bit, matching the Kronecker ordering
+    ``I (x) ... (x) op_site (x) ... (x) I``; bit value 0 is spin up (z = +1).
     """
-    result = jnp.array([[1.0]], dtype=jnp.complex128)
-    for i in range(n_sites):
-        m = op if i == site else IDENTITY_2
-        result = jnp.kron(result, m)
-    return result
+    states = np.arange(2**n_sites)[:, None]
+    bits = (states >> (n_sites - 1 - np.arange(n_sites))) & 1
+    return 1 - 2 * bits
 
 
 @dataclass(frozen=True)
@@ -90,7 +65,8 @@ class SpinChain:
     """Quantum spin-1/2 chain with Heisenberg interactions.
 
     Builds the full Hamiltonian matrix via exact diagonalization.
-    Limited to small chains (N <= 16) due to exponential Hilbert space.
+    Limited to small chains (N <= 14): the dense 2^N x 2^N Hamiltonian
+    takes 16 * 4^N bytes (4.3 GB at N = 14).
 
     Example:
         >>> chain = SpinChain(n_sites=8, J=1.0, h=0.0)
@@ -113,10 +89,10 @@ class SpinChain:
     ) -> None:
         if n_sites < 2:
             raise ConfigurationError(f"n_sites must be >= 2, got {n_sites}")
-        if n_sites > 16:
+        if n_sites > _MAX_SITES:
             raise ConfigurationError(
                 f"n_sites={n_sites} gives Hilbert space dim 2^{n_sites}="
-                f"{2**n_sites}. Max supported is 16 (65536 states)."
+                f"{2**n_sites}. Max supported is {_MAX_SITES} (dense diagonalization)."
             )
         self._n_sites = n_sites
         self._J = J
@@ -137,29 +113,31 @@ class SpinChain:
     def build_hamiltonian(self) -> Array:
         """Construct the full Hamiltonian matrix.
 
+        Built directly in the S^z product basis: each bond contributes
+        ``z_i z_j`` on the diagonal and a spin exchange (matrix element 2 in
+        units of the Pauli operators) between states whose spins i and j
+        differ, so no 2^N x 2^N Kronecker intermediates are formed.
+
         Returns:
             Hamiltonian matrix, shape (2^N, 2^N).
         """
         N = self._n_sites
-        dim = self._dim
-        H = jnp.zeros((dim, dim), dtype=jnp.complex128)
-
-        # Heisenberg interaction: -J * sum (Sx_i Sx_{i+1} + Sy_i Sy_{i+1} + Sz_i Sz_{i+1})
+        z = _spin_z(N)
+        states = np.arange(self._dim)
         n_bonds = N if self._periodic else N - 1
+
+        # H = -J/4 sum_<ij> sigma_i . sigma_j - h/2 sum_i sigma^z_i
+        diag = np.zeros(self._dim)
+        rows, cols = [], []
         for i in range(n_bonds):
             j = (i + 1) % N
-            for sigma in [SIGMA_X, SIGMA_Y, SIGMA_Z]:
-                Si = _tensor_product_operator(sigma, i, N)
-                Sj = _tensor_product_operator(sigma, j, N)
-                H = H - self._J * 0.25 * Si @ Sj  # Factor of 1/4 for spin-1/2
-
-        # External field: -h * sum Sz_i
-        if self._h != 0.0:
-            for i in range(N):
-                Szi = _tensor_product_operator(SIGMA_Z, i, N)
-                H = H - self._h * 0.5 * Szi  # Factor of 1/2 for spin-1/2
-
-        return H
+            diag += z[:, i] * z[:, j]
+            flip = z[:, i] != z[:, j]
+            rows.append(states[flip])
+            cols.append(states[flip] ^ ((1 << (N - 1 - i)) | (1 << (N - 1 - j))))
+        H = jnp.diag(-0.25 * self._J * jnp.asarray(diag) - 0.5 * self._h * z.sum(1))
+        H = H.at[np.concatenate(rows), np.concatenate(cols)].add(-0.5 * self._J)
+        return H.astype(jnp.complex128)
 
     def diagonalize(self, n_states: int = 10) -> SpinChainResult:
         """Diagonalize the Hamiltonian and return lowest eigenstates.
@@ -187,19 +165,9 @@ class SpinChain:
         energies = eigenvalues[:n_states]
         states = eigenvectors[:, :n_states].T  # (n_states, dim)
 
-        # Compute magnetization per site for each state
-        total_Sz = jnp.zeros((self._dim, self._dim), dtype=jnp.complex128)
-        for i in range(self._n_sites):
-            total_Sz = total_Sz + 0.5 * _tensor_product_operator(
-                SIGMA_Z, i, self._n_sites
-            )
-
-        magnetization = jnp.array(
-            [
-                jnp.real(state.conj() @ total_Sz @ state) / self._n_sites
-                for state in states
-            ]
-        )
+        # <S^z_total> / N for each state; S^z_total is diagonal in this basis.
+        total_sz = 0.5 * _spin_z(self._n_sites).sum(axis=1)
+        magnetization = (jnp.abs(states) ** 2 @ total_sz) / self._n_sites
 
         return SpinChainResult(
             energies=energies,

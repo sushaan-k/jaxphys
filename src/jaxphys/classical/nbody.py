@@ -18,11 +18,13 @@ References:
 from __future__ import annotations
 
 import logging
+from functools import partial
 
 import jax
 import jax.numpy as jnp
 from jax import Array
 
+from jaxphys._rollout import is_traced, strided_rollout
 from jaxphys.config import NBodyConfig
 from jaxphys.exceptions import (
     ConfigurationError,
@@ -87,64 +89,6 @@ class NBody:
         """Number of bodies in the system."""
         return int(self._masses.shape[0])
 
-    @staticmethod
-    @jax.jit
-    def _compute_accelerations(
-        positions: Array,
-        masses: Array,
-        G: float,
-        softening: float,
-    ) -> Array:
-        """Compute gravitational accelerations on all bodies.
-
-        Uses vectorized pairwise computation for GPU efficiency.
-
-        Args:
-            positions: Shape (n, 3).
-            masses: Shape (n,).
-            G: Gravitational constant.
-            softening: Softening length.
-
-        Returns:
-            Accelerations, shape (n, 3).
-        """
-        # Pairwise displacement vectors: r_ij = r_j - r_i
-        # Shape: (n, n, 3)
-        dr = positions[jnp.newaxis, :, :] - positions[:, jnp.newaxis, :]
-
-        # Pairwise distances with softening
-        # Shape: (n, n)
-        dist_sq = jnp.sum(dr**2, axis=-1) + softening**2
-        inv_dist_cube = dist_sq ** (-1.5)
-
-        # Zero self-interaction
-        inv_dist_cube = inv_dist_cube.at[jnp.diag_indices(positions.shape[0])].set(0.0)
-
-        # Acceleration: a_i = G * sum_j m_j * (r_j - r_i) / |r_ij|^3
-        # Shape: (n, 3)
-        accel = G * jnp.einsum("j,ijk,ij->ik", masses, dr, inv_dist_cube)
-        return accel
-
-    def _kinetic_energy(self, velocities: Array, masses: Array) -> Array:
-        """Compute total kinetic energy: sum(0.5 * m * v^2)."""
-        return 0.5 * jnp.sum(masses[:, None] * velocities**2)
-
-    def _potential_energy(
-        self, positions: Array, masses: Array, G: float, softening: float
-    ) -> Array:
-        """Compute total gravitational potential energy.
-
-        U = -G * sum_{i<j} m_i * m_j / |r_i - r_j|
-        """
-        dr = positions[jnp.newaxis, :, :] - positions[:, jnp.newaxis, :]
-        dist = jnp.sqrt(jnp.sum(dr**2, axis=-1) + softening**2)
-        # Mass product matrix
-        mass_prod = masses[:, None] * masses[None, :]
-        # Upper triangle sum (avoid double-counting and self)
-        n = masses.shape[0]
-        mask = jnp.triu(jnp.ones((n, n)), k=1)
-        return -G * jnp.sum(mask * mass_prod / dist)
-
     def simulate(
         self,
         t_span: tuple[float, float] = (0.0, 100.0),
@@ -164,11 +108,12 @@ class NBody:
         Raises:
             NumericalInstabilityError: If NaN values detected.
         """
+        if n_steps < 1:
+            raise ConfigurationError(f"n_steps must be >= 1, got {n_steps}")
+        if save_every < 1:
+            raise ConfigurationError(f"save_every must be >= 1, got {save_every}")
         t_start, t_end = t_span
         dt = (t_end - t_start) / n_steps
-        masses = self._masses
-        G = self._config.G
-        softening = self._config.softening
 
         logger.info(
             "Starting N-body simulation: n=%d, n_steps=%d, dt=%.2e",
@@ -177,57 +122,19 @@ class NBody:
             dt,
         )
 
-        def verlet_step(
-            carry: tuple[Array, Array, Array, float],
-            _: None,
-        ) -> tuple[
-            tuple[Array, Array, Array, float],
-            tuple[Array, Array, Array],
-        ]:
-            pos, vel, acc, t = carry
-            # Velocity Verlet
-            pos_new = pos + vel * dt + 0.5 * acc * dt**2
-            acc_new = NBody._compute_accelerations(pos_new, masses, G, softening)
-            vel_new = vel + 0.5 * (acc + acc_new) * dt
-            return (pos_new, vel_new, acc_new, t + dt), (
-                pos_new,
-                vel_new,
-                jnp.asarray(t + dt),
-            )
-
-        # Initial acceleration
-        acc0 = NBody._compute_accelerations(self._positions, masses, G, softening)
-
-        init_carry = (self._positions, self._velocities, acc0, t_start)
-        _, (pos_hist, vel_hist, t_hist) = jax.lax.scan(
-            verlet_step, init_carry, None, length=n_steps
+        pos_hist, vel_hist, t_hist, energy = _nbody_rollout(
+            self._positions,
+            self._velocities,
+            self._masses,
+            jnp.asarray(t_start, dtype=jnp.float64),
+            jnp.asarray(dt, dtype=jnp.float64),
+            self._config.G,
+            self._config.softening,
+            n_steps=n_steps,
+            save_every=save_every,
         )
 
-        # Prepend initial state
-        pos_hist = jnp.concatenate(
-            [self._positions[jnp.newaxis, :, :], pos_hist], axis=0
-        )
-        vel_hist = jnp.concatenate(
-            [self._velocities[jnp.newaxis, :, :], vel_hist], axis=0
-        )
-        t_hist = jnp.concatenate([jnp.array([t_start]), t_hist], axis=0)
-
-        # Subsample
-        if save_every > 1:
-            indices = jnp.arange(0, n_steps + 1, save_every)
-            pos_hist = pos_hist[indices]
-            vel_hist = vel_hist[indices]
-            t_hist = t_hist[indices]
-
-        # Compute energy at saved steps
-        def compute_energy(pos: Array, vel: Array) -> Array:
-            ke = self._kinetic_energy(vel, masses)
-            pe = self._potential_energy(pos, masses, G, softening)
-            return ke + pe
-
-        energy = jax.vmap(compute_energy)(pos_hist, vel_hist)
-
-        if jnp.any(jnp.isnan(pos_hist)):
+        if not is_traced(pos_hist) and bool(jnp.any(jnp.isnan(pos_hist))):
             raise NumericalInstabilityError(
                 "NaN detected in N-body simulation. Try increasing "
                 "n_steps or the softening parameter."
@@ -237,6 +144,75 @@ class NBody:
             t=t_hist,
             positions=pos_hist,
             velocities=vel_hist,
-            masses=masses,
+            masses=self._masses,
             energy=energy,
         )
+
+
+def gravitational_accelerations(
+    positions: Array, masses: Array, G: float | Array, softening: float | Array
+) -> Array:
+    """Softened pairwise gravitational accelerations, shape ``(n, 3)``.
+
+    a_i = G * sum_{j != i} m_j (r_j - r_i) / (|r_j - r_i|^2 + eps^2)^{3/2}
+    """
+    # dr[i, j] = r_j - r_i, shape (n, n, 3)
+    dr = positions[jnp.newaxis, :, :] - positions[:, jnp.newaxis, :]
+    # Pair weights m_j / d_ij^3 with the self-interaction removed. The
+    # diagonal distance is replaced before the power so gradients stay
+    # finite even without softening.
+    self_pair = jnp.eye(positions.shape[0], dtype=bool)
+    dist_sq = jnp.where(self_pair, 1.0, jnp.sum(dr**2, axis=-1) + softening**2)
+    w = jnp.where(self_pair, 0.0, masses[jnp.newaxis, :] * dist_sq**-1.5)
+    return G * jnp.einsum("ij,ijk->ik", w, dr)
+
+
+def total_energy(
+    positions: Array,
+    velocities: Array,
+    masses: Array,
+    G: float | Array,
+    softening: float | Array,
+) -> Array:
+    """Kinetic plus softened pairwise potential energy of an N-body state."""
+    kinetic = 0.5 * jnp.sum(masses[:, None] * velocities**2)
+    dr = positions[jnp.newaxis, :, :] - positions[:, jnp.newaxis, :]
+    upper = jnp.triu(jnp.ones(masses.shape * 2, dtype=bool), k=1)
+    dist = jnp.sqrt(jnp.where(upper, jnp.sum(dr**2, axis=-1) + softening**2, 1.0))
+    pair = jnp.where(upper, masses[:, None] * masses[None, :] / dist, 0.0)
+    return kinetic - G * jnp.sum(pair)
+
+
+@partial(jax.jit, static_argnames=("n_steps", "save_every"))
+def _nbody_rollout(
+    positions: Array,
+    velocities: Array,
+    masses: Array,
+    t0: Array,
+    dt: Array,
+    G: float,
+    softening: float,
+    *,
+    n_steps: int,
+    save_every: int,
+) -> tuple[Array, Array, Array, Array]:
+    """Velocity-Verlet rollout saving every ``save_every`` steps (incl. t0)."""
+
+    def step(
+        carry: tuple[Array, Array, Array, Array],
+    ) -> tuple[Array, Array, Array, Array]:
+        pos, vel, acc, t = carry
+        pos = pos + vel * dt + 0.5 * acc * dt**2
+        acc_new = gravitational_accelerations(pos, masses, G, softening)
+        vel = vel + 0.5 * (acc + acc_new) * dt
+        return pos, vel, acc_new, t + dt
+
+    def observe(carry: tuple[Array, Array, Array, Array]) -> tuple[Array, ...]:
+        pos, vel, _, t = carry
+        return pos, vel, t, total_energy(pos, vel, masses, G, softening)
+
+    acc0 = gravitational_accelerations(positions, masses, G, softening)
+    out: tuple[Array, Array, Array, Array] = strided_rollout(
+        step, (positions, velocities, acc0, t0), n_steps, save_every, observe
+    )
+    return out

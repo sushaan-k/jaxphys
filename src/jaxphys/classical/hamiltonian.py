@@ -24,7 +24,8 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
-from jaxphys.classical.integrators import get_integrator
+from jaxphys._rollout import is_traced
+from jaxphys.classical.integrators import integrate_system
 from jaxphys.exceptions import (
     ConfigurationError,
     NumericalInstabilityError,
@@ -133,68 +134,24 @@ class HamiltonianSystem:
         if p.shape != (self._n_dof,):
             raise ConfigurationError(f"p0 shape {p.shape} != expected ({self._n_dof},)")
 
-        t_start, t_end = t_span
-        if t_end <= t_start:
-            raise ConfigurationError(f"t_end ({t_end}) must be > t_start ({t_start})")
-
-        integrate_step = get_integrator(integrator)
-        n_steps = int((t_end - t_start) / dt)
-
         logger.info(
-            "Starting Hamiltonian simulation: n_dof=%d, n_steps=%d, integrator=%s",
+            "Starting Hamiltonian simulation: n_dof=%d, integrator=%s",
             self._n_dof,
-            n_steps,
             integrator,
         )
+        q_hist, p_hist, t_hist, e_hist = integrate_system(
+            integrator,
+            self._deriv_fn,
+            self.energy,
+            q,
+            p,
+            t_span,
+            dt,
+            params,
+            save_every,
+        )
 
-        # JIT-compile the full scan loop so repeated simulate() calls
-        # with the same shapes/dtypes skip JAX tracing entirely.
-        @jax.jit
-        def _run_scan(
-            q_init: Array, p_init: Array, t_init: float
-        ) -> tuple[Array, Array, Array, Array]:
-            def scan_step(
-                carry: tuple[Array, Array, float],
-                _: None,
-            ) -> tuple[
-                tuple[Array, Array, float],
-                tuple[Array, Array, Array, Array],
-            ]:
-                q_c, p_c, t_c = carry
-                q_new, p_new, t_new = integrate_step(
-                    self._deriv_fn, q_c, p_c, t_c, dt, params
-                )
-                e = self.energy(q_new, p_new, params)
-                return (q_new, p_new, t_new), (
-                    q_new,
-                    p_new,
-                    jnp.asarray(t_new),
-                    e,
-                )
-
-            init_carry = (q_init, p_init, t_init)
-            _, (q_h, p_h, t_h, e_h) = jax.lax.scan(
-                scan_step, init_carry, None, length=n_steps
-            )
-            return q_h, p_h, t_h, e_h
-
-        q_hist, p_hist, t_hist, e_hist = _run_scan(q, p, t_start)
-
-        # Prepend initial state
-        e0 = self.energy(q, p, params)
-        q_hist = jnp.concatenate([q[jnp.newaxis, :], q_hist], axis=0)
-        p_hist = jnp.concatenate([p[jnp.newaxis, :], p_hist], axis=0)
-        t_hist = jnp.concatenate([jnp.array([t_start]), t_hist], axis=0)
-        e_hist = jnp.concatenate([jnp.array([e0]), e_hist], axis=0)
-
-        if save_every > 1:
-            indices = jnp.arange(0, n_steps + 1, save_every)
-            q_hist = q_hist[indices]
-            p_hist = p_hist[indices]
-            t_hist = t_hist[indices]
-            e_hist = e_hist[indices]
-
-        if jnp.any(jnp.isnan(q_hist)):
+        if not is_traced(q_hist) and bool(jnp.any(jnp.isnan(q_hist))):
             raise NumericalInstabilityError(
                 f"NaN detected in Hamiltonian trajectory. "
                 f"Try reducing dt (currently {dt})."

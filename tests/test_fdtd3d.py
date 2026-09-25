@@ -52,9 +52,7 @@ class TestEMGrid3D:
         """X-polarized source should excite Ex component."""
         grid = EMGrid3D(size=(16, 16, 16), resolution=0.01)
         grid.add_source(
-            PointSource3D(
-                frequency=3e9, position=(8, 8, 8), polarization="x"
-            )
+            PointSource3D(frequency=3e9, position=(8, 8, 8), polarization="x")
         )
 
         fields = grid.simulate(t_span=(0, 2e-10), save_every=5)
@@ -64,9 +62,7 @@ class TestEMGrid3D:
         """Y-polarized source should excite Ey component."""
         grid = EMGrid3D(size=(16, 16, 16), resolution=0.01)
         grid.add_source(
-            PointSource3D(
-                frequency=3e9, position=(8, 8, 8), polarization="y"
-            )
+            PointSource3D(frequency=3e9, position=(8, 8, 8), polarization="y")
         )
 
         fields = grid.simulate(t_span=(0, 2e-10), save_every=5)
@@ -94,9 +90,7 @@ class TestEMGrid3D:
 
     def test_periodic_boundary(self) -> None:
         """Periodic boundary should produce different results than absorbing."""
-        grid_abs = EMGrid3D(
-            size=(16, 16, 16), resolution=0.01, boundary="absorbing"
-        )
+        grid_abs = EMGrid3D(size=(16, 16, 16), resolution=0.01, boundary="absorbing")
         grid_per = EMGrid3D(
             size=(16, 16, 16), resolution=0.01, boundary="periodic", pml_layers=0
         )

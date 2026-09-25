@@ -118,10 +118,9 @@ def solve_eigenvalue_problem(
     energies = eigenvalues[:n_states]
     wavefunctions = eigenvectors[:, :n_states].T  # shape (n_states, n_points)
 
-    # Normalize each wavefunction
-    for i in range(n_states):
-        norm = jnp.sqrt(jnp.trapezoid(jnp.abs(wavefunctions[i]) ** 2, x))
-        wavefunctions = wavefunctions.at[i].set(wavefunctions[i] / norm)
+    # Normalize each wavefunction so that integral |psi|^2 dx = 1
+    norms = jnp.sqrt(jnp.trapezoid(jnp.abs(wavefunctions) ** 2, x, axis=-1))
+    wavefunctions = wavefunctions / norms[:, None]
 
     return EigenResult(
         energies=energies,

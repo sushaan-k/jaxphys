@@ -18,11 +18,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import partial
 
 import jax
 import jax.numpy as jnp
 from jax import Array
 
+from jaxphys._rollout import strided_rollout
 from jaxphys.exceptions import ConfigurationError
 
 logger = logging.getLogger(__name__)
@@ -169,7 +171,7 @@ class LindbladResult:
 def _lindblad_rhs(
     rho: Array,
     hamiltonian: Array,
-    lindblad_ops: list[Array],
+    lindblad_ops: Array,
     rates: Array,
     hbar: float,
 ) -> Array:
@@ -180,7 +182,7 @@ def _lindblad_rhs(
     Args:
         rho: Current density matrix.
         hamiltonian: System Hamiltonian.
-        lindblad_ops: List of Lindblad (jump) operators.
+        lindblad_ops: Stacked Lindblad (jump) operators, shape (k, d, d).
         rates: Dissipation rates for each operator.
         hbar: Reduced Planck constant.
 
@@ -191,13 +193,49 @@ def _lindblad_rhs(
     commutator = hamiltonian @ rho - rho @ hamiltonian
     drho = -1j / hbar * commutator
 
-    # Dissipative part
-    for k, L in enumerate(lindblad_ops):
-        Ldag = L.conj().T
-        LdagL = Ldag @ L
-        drho = drho + rates[k] * (L @ rho @ Ldag - 0.5 * (LdagL @ rho + rho @ LdagL))
+    # Dissipative part: sum_k gamma_k (L rho L^+ - {L^+ L, rho} / 2)
+    Ldag = jnp.conj(jnp.swapaxes(lindblad_ops, -1, -2))
+    LdagL = jnp.einsum("k,kij,kjl->il", rates, Ldag, lindblad_ops)
+    jumps = jnp.einsum(
+        "k,kij,jl,kml->im", rates, lindblad_ops, rho, jnp.conj(lindblad_ops)
+    )
+    return drho + jumps - 0.5 * (LdagL @ rho + rho @ LdagL)
 
-    return drho
+
+@partial(jax.jit, static_argnames=("n_steps", "save_every"))
+def _lindblad_rollout(
+    rho0: Array,
+    hamiltonian: Array,
+    lindblad_ops: Array,
+    rates: Array,
+    dt: float,
+    hbar: float,
+    *,
+    n_steps: int,
+    save_every: int,
+) -> tuple[Array, Array]:
+    """RK4 rollout; returns (rho, purity) at every ``save_every`` steps."""
+
+    def rhs(rho: Array) -> Array:
+        return _lindblad_rhs(rho, hamiltonian, lindblad_ops, rates, hbar)
+
+    def rk4_step(rho: Array) -> Array:
+        k1 = rhs(rho)
+        k2 = rhs(rho + 0.5 * dt * k1)
+        k3 = rhs(rho + 0.5 * dt * k2)
+        k4 = rhs(rho + dt * k3)
+        rho_new = rho + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+        # Remove round-off drift from Hermiticity and unit trace.
+        rho_new = 0.5 * (rho_new + rho_new.conj().T)
+        return rho_new / jnp.trace(rho_new)
+
+    def observe(rho: Array) -> tuple[Array, Array]:
+        return rho, jnp.real(jnp.trace(rho @ rho))
+
+    out: tuple[Array, Array] = strided_rollout(
+        rk4_step, rho0, n_steps, save_every, observe
+    )
+    return out
 
 
 def lindblad_evolve(
@@ -260,6 +298,10 @@ def lindblad_evolve(
         validated_ops.append(op_arr)
 
     t_start, t_end = t_span
+    if dt <= 0:
+        raise ConfigurationError(f"dt must be positive, got {dt}")
+    if save_every < 1:
+        raise ConfigurationError(f"save_every must be >= 1, got {save_every}")
     n_steps = int((t_end - t_start) / dt)
 
     logger.info(
@@ -269,34 +311,18 @@ def lindblad_evolve(
         len(lindblad_ops),
     )
 
-    def rhs(rho: Array) -> Array:
-        return _lindblad_rhs(rho, hamiltonian, validated_ops, rates_arr, hbar)
-
-    def rk4_step(rho: Array, _: None) -> tuple[Array, tuple[Array, Array]]:
-        k1 = rhs(rho)
-        k2 = rhs(rho + 0.5 * dt * k1)
-        k3 = rhs(rho + 0.5 * dt * k2)
-        k4 = rhs(rho + dt * k3)
-        rho_new = rho + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
-        rho_new = 0.5 * (rho_new + rho_new.conj().T)
-        trace = jnp.trace(rho_new)
-        rho_new = rho_new / trace
-        purity: Array = jnp.real(jnp.trace(rho_new @ rho_new))
-        return rho_new, (rho_new, purity)
-
-    _, (rho_hist, purity_hist) = jax.lax.scan(rk4_step, rho0.rho, None, length=n_steps)
-
-    # Prepend initial state
-    purity0: Array = jnp.real(jnp.trace(rho0.rho @ rho0.rho))
-    rho_hist = jnp.concatenate([rho0.rho[None, :, :], rho_hist], axis=0)
-    purity_hist = jnp.concatenate([jnp.array([purity0]), purity_hist])
-    t_array = jnp.linspace(t_start, t_end, n_steps + 1)
-
-    if save_every > 1:
-        indices = jnp.arange(0, n_steps + 1, save_every)
-        rho_hist = rho_hist[indices]
-        purity_hist = purity_hist[indices]
-        t_array = t_array[indices]
+    ops = jnp.stack(validated_ops) if validated_ops else jnp.zeros((0, dim, dim))
+    rho_hist, purity_hist = _lindblad_rollout(
+        rho0.rho,
+        hamiltonian,
+        ops,
+        rates_arr.astype(jnp.float64),
+        dt,
+        hbar,
+        n_steps=n_steps,
+        save_every=save_every,
+    )
+    t_array = t_start + dt * jnp.arange(0, n_steps + 1, save_every)
 
     return LindbladResult(
         t=t_array,

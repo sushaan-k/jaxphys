@@ -20,12 +20,14 @@ References:
 from __future__ import annotations
 
 import logging
+from functools import partial
 from typing import Any, cast
 
 import jax
 import jax.numpy as jnp
 from jax import Array
 
+from jaxphys._rollout import is_array_tree, strided_rollout
 from jaxphys.exceptions import ConfigurationError
 from jaxphys.state import Trajectory
 
@@ -66,13 +68,14 @@ class RigidBody:
                 "All principal moments of inertia must be positive"
             )
         self._torque_fn = torque_fn
+        self._rollout = jax.jit(self._rollout_impl, static_argnames=("n_steps",))
 
     @property
     def inertia(self) -> Array:
         """Principal moments of inertia."""
         return self._inertia
 
-    def _euler_equations(self, omega: Array, t: float, params: Any) -> Array:
+    def _euler_equations(self, omega: Array, t: Array | float, params: Any) -> Array:
         """Euler's equations for rigid body rotation.
 
         Args:
@@ -153,6 +156,51 @@ class RigidBody:
         """
         return self._inertia * omega
 
+    def _rk4_step(
+        self, carry: tuple[Array, Array, Array], dt: Array, params: Any
+    ) -> tuple[Array, Array, Array]:
+        """One RK4 step of the coupled (quaternion, omega) system."""
+        quat_c, omega_c, t_c = carry
+
+        k1_o = self._euler_equations(omega_c, t_c, params)
+        k2_o = self._euler_equations(omega_c + 0.5 * dt * k1_o, t_c + 0.5 * dt, params)
+        k3_o = self._euler_equations(omega_c + 0.5 * dt * k2_o, t_c + 0.5 * dt, params)
+        k4_o = self._euler_equations(omega_c + dt * k3_o, t_c + dt, params)
+        omega_new = omega_c + (dt / 6.0) * (k1_o + 2 * k2_o + 2 * k3_o + k4_o)
+
+        k1_q = self._quaternion_deriv(quat_c, omega_c)
+        k2_q = self._quaternion_deriv(
+            quat_c + 0.5 * dt * k1_q, omega_c + 0.5 * dt * k1_o
+        )
+        k3_q = self._quaternion_deriv(
+            quat_c + 0.5 * dt * k2_q, omega_c + 0.5 * dt * k2_o
+        )
+        k4_q = self._quaternion_deriv(quat_c + dt * k3_q, omega_c + dt * k3_o)
+        quat_new = quat_c + (dt / 6.0) * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
+        return self._normalize_quaternion(quat_new), omega_new, t_c + dt
+
+    def _rollout_impl(
+        self,
+        quat: Array,
+        omega: Array,
+        t0: Array,
+        dt: Array,
+        params: Any,
+        n_steps: int,
+    ) -> tuple[Array, Array, Array, Array]:
+        def observe(carry: tuple[Array, Array, Array]) -> tuple[Array, ...]:
+            quat_c, omega_c, t_c = carry
+            return quat_c, omega_c, t_c, self.rotational_energy(omega_c)
+
+        out: tuple[Array, Array, Array, Array] = strided_rollout(
+            lambda carry: self._rk4_step(carry, dt, params),
+            (quat, omega, t0),
+            n_steps,
+            1,
+            observe,
+        )
+        return out
+
     def simulate(
         self,
         omega0: list[float] | Array,
@@ -188,6 +236,8 @@ class RigidBody:
             quat = self._normalize_quaternion(quat)
 
         t_start, t_end = t_span
+        if dt <= 0:
+            raise ConfigurationError(f"dt must be positive, got {dt}")
         n_steps = int((t_end - t_start) / dt)
 
         logger.info(
@@ -196,62 +246,15 @@ class RigidBody:
             n_steps,
         )
 
-        def rk4_step(
-            carry: tuple[Array, Array, float],
-            _: None,
-        ) -> tuple[
-            tuple[Array, Array, float],
-            tuple[Array, Array, Array, Array],
-        ]:
-            quat_c, omega_c, t_c = carry
-
-            # RK4 for omega (Euler's equations)
-            k1_o = self._euler_equations(omega_c, t_c, params)
-            k2_o = self._euler_equations(
-                omega_c + 0.5 * dt * k1_o, t_c + 0.5 * dt, params
+        t0 = jnp.asarray(t_start, dtype=jnp.float64)
+        dt_arr = jnp.asarray(dt, dtype=jnp.float64)
+        if is_array_tree(params):
+            out = self._rollout(quat, omega, t0, dt_arr, params, n_steps=n_steps)
+        else:  # untraceable params: close over them (recompiles per call)
+            out = jax.jit(partial(self._rollout_impl, params=params, n_steps=n_steps))(
+                quat, omega, t0, dt_arr
             )
-            k3_o = self._euler_equations(
-                omega_c + 0.5 * dt * k2_o, t_c + 0.5 * dt, params
-            )
-            k4_o = self._euler_equations(omega_c + dt * k3_o, t_c + dt, params)
-            omega_new = omega_c + (dt / 6.0) * (k1_o + 2 * k2_o + 2 * k3_o + k4_o)
-
-            # RK4 for quaternion
-            k1_q = self._quaternion_deriv(quat_c, omega_c)
-            k2_q = self._quaternion_deriv(
-                quat_c + 0.5 * dt * k1_q,
-                omega_c + 0.5 * dt * k1_o,
-            )
-            k3_q = self._quaternion_deriv(
-                quat_c + 0.5 * dt * k2_q,
-                omega_c + 0.5 * dt * k2_o,
-            )
-            k4_q = self._quaternion_deriv(
-                quat_c + dt * k3_q,
-                omega_c + dt * k3_o,
-            )
-            quat_new = quat_c + (dt / 6.0) * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
-            quat_new = self._normalize_quaternion(quat_new)
-
-            e = self.rotational_energy(omega_new)
-            return (quat_new, omega_new, t_c + dt), (
-                quat_new,
-                omega_new,
-                jnp.asarray(t_c + dt),
-                e,
-            )
-
-        init = (quat, omega, t_start)
-        _, (q_hist, o_hist, t_hist, e_hist) = jax.lax.scan(
-            rk4_step, init, None, length=n_steps
-        )
-
-        # Prepend initial state
-        e0 = self.rotational_energy(omega)
-        q_hist = jnp.concatenate([quat[None, :], q_hist], axis=0)
-        o_hist = jnp.concatenate([omega[None, :], o_hist], axis=0)
-        t_hist = jnp.concatenate([jnp.array([t_start]), t_hist])
-        e_hist = jnp.concatenate([jnp.array([e0]), e_hist])
+        q_hist, o_hist, t_hist, e_hist = out
 
         return Trajectory(
             t=t_hist,

@@ -135,17 +135,18 @@ class TraceResult:
 
     @property
     def image_distance(self) -> float | None:
-        """Compute image distance from the last element.
+        """Distance after the last element at which the input plane is imaged.
 
-        For a system matrix [[A, B], [C, D]], the image forms where
-        B = 0 (all rays from a point converge). If B != 0, returns None.
+        For an object at the input plane (position 0) and system matrix
+        ``[[A, B], [C, D]]``, adding free space ``d`` gives ``B + d*D``; the
+        image forms where this vanishes, ``d = -B / D``. A negative value is
+        a virtual image; ``None`` means the image is at infinity (``D = 0``).
         """
         B = float(self.system_matrix[0, 1])
-        if abs(B) < 1e-10:
-            return 0.0
-        # For a lens at the end: image at d where A + B*d_obj = 0
-        # This is a simplified check
-        return None
+        D = float(self.system_matrix[1, 1])
+        if abs(D) < 1e-12:
+            return None
+        return -B / D
 
 
 def trace_system(

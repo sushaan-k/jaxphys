@@ -31,7 +31,7 @@ def metropolis_step(
     proposal_fn: ProposalFn,
     temperature: float,
     key: Array,
-) -> tuple[Array, Array, bool]:
+) -> tuple[Array, Array, Array]:
     """Perform one Metropolis-Hastings step.
 
     Args:
@@ -42,7 +42,8 @@ def metropolis_step(
         key: PRNG key.
 
     Returns:
-        Tuple of (new_state, new_key, accepted).
+        Tuple of (new_state, new_key, accepted), where ``accepted`` is a
+        boolean scalar array (so the step can run under ``jax.jit``).
     """
     key, k1, k2 = jax.random.split(key, 3)
 
@@ -53,9 +54,10 @@ def metropolis_step(
     accept = (dE < 0) | (jax.random.uniform(k2) < jnp.exp(-beta * dE))
     new_state = jnp.where(accept, proposed, state)
 
-    return new_state, key, bool(accept)
+    return new_state, key, accept
 
 
+@jax.jit
 def wolff_step(
     spins: Array,
     temperature: float,
@@ -66,14 +68,17 @@ def wolff_step(
 
     The Wolff algorithm:
     1. Pick a random seed spin.
-    2. Grow a cluster by adding aligned neighbors with probability
-       p = 1 - exp(-2*beta*J).
-    3. Flip the entire cluster.
+    2. Activate each satisfied bond (J * s_i * s_j > 0) independently with
+       probability p = 1 - exp(-2*beta*|J|).
+    3. Flip the connected cluster of active bonds containing the seed.
 
-    This eliminates critical slowing down near T_c.
+    Every bond is sampled exactly once, which is what detailed balance
+    requires; the cluster is then grown to convergence with a
+    ``lax.while_loop`` flood fill, so arbitrarily shaped clusters are
+    captured. This eliminates critical slowing down near T_c.
 
     Args:
-        spins: 2D spin array (+1/-1), shape (Lx, Ly).
+        spins: 2D spin array (+1/-1), shape (Lx, Ly), periodic boundaries.
         temperature: Temperature.
         J: Coupling constant.
         key: PRNG key.
@@ -83,52 +88,35 @@ def wolff_step(
     """
     Lx, Ly = spins.shape
     beta = 1.0 / temperature
-    p_add = 1.0 - jnp.exp(-2.0 * beta * J)
+    p_add = 1.0 - jnp.exp(-2.0 * beta * jnp.abs(J))
 
-    key, k_seed_x, k_seed_y = jax.random.split(key, 3)
-    # Random seed site
-    seed_x = jax.random.randint(k_seed_x, (), 0, Lx)
-    seed_y = jax.random.randint(k_seed_y, (), 0, Ly)
-    seed_spin = spins[seed_x, seed_y]
+    key, k_seed, k_x, k_y = jax.random.split(key, 4)
+    seed = jax.random.randint(k_seed, (), 0, Lx * Ly)
 
-    # BFS cluster growth using a fixed-size visited mask
-    cluster = jnp.zeros((Lx, Ly), dtype=bool)
-    cluster = cluster.at[seed_x, seed_y].set(True)
+    # bond_x[i, j] links (i, j)-(i+1, j); bond_y[i, j] links (i, j)-(i, j+1).
+    def bonds(k: Array, axis: int) -> Array:
+        satisfied = J * spins * jnp.roll(spins, -1, axis=axis) > 0
+        return satisfied & (jax.random.uniform(k, spins.shape) < p_add)
 
-    # Use a scan-based approach for JIT compatibility
-    def grow_step(
-        carry: tuple[Array, Array, Array],
-        _: None,
-    ) -> tuple[tuple[Array, Array, Array], None]:
-        cl, sp, k = carry
-        k, k1 = jax.random.split(k)
+    bond_x = bonds(k_x, 0)
+    bond_y = bonds(k_y, 1)
 
-        # For each cluster spin, try adding its neighbors
-        # Shift cluster mask to find potential additions
-        up = jnp.roll(cl, 1, axis=0)
-        down = jnp.roll(cl, -1, axis=0)
-        left = jnp.roll(cl, 1, axis=1)
-        right = jnp.roll(cl, -1, axis=1)
+    def grow(cluster: Array) -> Array:
+        return (
+            cluster
+            | jnp.roll(cluster & bond_x, 1, axis=0)
+            | (jnp.roll(cluster, -1, axis=0) & bond_x)
+            | jnp.roll(cluster & bond_y, 1, axis=1)
+            | (jnp.roll(cluster, -1, axis=1) & bond_y)
+        )
 
-        # Neighbors of cluster members that are not yet in cluster
-        candidates = (up | down | left | right) & ~cl
+    def not_converged(state: tuple[Array, Array]) -> Array:
+        return state[1]
 
-        # Only accept aligned spins with probability p_add
-        aligned = sp == seed_spin
-        rands = jax.random.uniform(k1, shape=(Lx, Ly))
-        accept = candidates & aligned & (rands < p_add)
+    def body(state: tuple[Array, Array]) -> tuple[Array, Array]:
+        grown = grow(state[0])
+        return grown, jnp.any(grown != state[0])
 
-        cl = cl | accept
-        return (cl, sp, k), None
-
-    # Iterate enough times for cluster to potentially span lattice.
-    # The cluster can grow at most one layer per iteration, so we need
-    # at least (Lx + Ly) iterations to span the lattice diagonally.
-    n_growth_steps = Lx + Ly
-    (cluster, _, key), _ = jax.lax.scan(
-        grow_step, (cluster, spins, key), None, length=n_growth_steps
-    )
-
-    # Flip the cluster
-    flipped = jnp.where(cluster, -spins, spins)
-    return flipped, key
+    cluster0 = (jnp.arange(Lx * Ly) == seed).reshape(Lx, Ly)
+    cluster, _ = jax.lax.while_loop(not_converged, body, (cluster0, jnp.array(True)))
+    return jnp.where(cluster, -spins, spins), key

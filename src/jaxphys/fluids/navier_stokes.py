@@ -13,7 +13,8 @@ velocity components derived from psi:
     u = dpsi/dy,   v = -dpsi/dx
 
 The Poisson equation for psi is solved iteratively using Jacobi
-relaxation. Time integration uses explicit Euler.
+relaxation. Time integration uses explicit Euler; wall vorticity follows
+Thom's formula.
 
 References:
     - Peyret & Taylor. "Computational Methods for Fluid Flow" (1983)
@@ -23,11 +24,13 @@ References:
 from __future__ import annotations
 
 import logging
+from functools import partial
 
 import jax
 import jax.numpy as jnp
 from jax import Array
 
+from jaxphys._rollout import strided_rollout
 from jaxphys.config import FluidConfig
 from jaxphys.exceptions import ConfigurationError
 from jaxphys.state import FluidHistory
@@ -94,24 +97,38 @@ class NavierStokesSolver:
             dt: Time step size.
             lid_velocity: Velocity of the top lid (x-direction).
             poisson_iters: Number of Jacobi iterations per step for the
-                Poisson solve.
+                Poisson solve (warm-started from the previous step).
             save_every: Save snapshots every N steps.
             initial_omega: Optional initial vorticity, shape (nx, ny).
 
         Returns:
-            FluidHistory with velocity and vorticity snapshots.
+            FluidHistory with snapshots at ``t = k * save_every * dt`` for
+            ``k = 0 .. n_steps // save_every``. ``vorticity`` is the solver's
+            vorticity field and ``rho`` is identically 1 (incompressible).
+
+        Raises:
+            ConfigurationError: If the advective CFL number exceeds 0.5, the
+                explicit diffusion limit ``nu*dt/dx^2 <= 0.25`` is violated,
+                or ``save_every < 1``.
         """
         nx, ny = self._nx, self._ny
         dx = self._dx
         nu = self._config.viscosity
 
-        # CFL check
         max_velocity = max(abs(lid_velocity), 0.1)
         cfl = max_velocity * dt / dx
         if cfl > 0.5:
             raise ConfigurationError(
                 f"CFL number {cfl:.3f} exceeds 0.5. Reduce dt or increase dx."
             )
+        diffusion = nu * dt / dx**2
+        if diffusion > 0.25:
+            raise ConfigurationError(
+                f"Diffusion number nu*dt/dx^2 = {diffusion:.3f} exceeds 0.25 "
+                "(explicit Euler limit). Reduce dt or increase dx."
+            )
+        if save_every < 1:
+            raise ConfigurationError(f"save_every must be >= 1, got {save_every}")
 
         logger.info(
             "Starting Navier-Stokes: grid=%dx%d, nu=%.4f, dt=%.4f, n_steps=%d",
@@ -122,138 +139,110 @@ class NavierStokesSolver:
             n_steps,
         )
 
-        omega = jnp.zeros((nx, ny)) if initial_omega is None else initial_omega
-
-        psi = jnp.zeros((nx, ny))
-
-        grid_x = jnp.arange(nx, dtype=jnp.float64) * dx
-        grid_y = jnp.arange(ny, dtype=jnp.float64) * dx
-
-        dx2 = dx * dx
-
-        def poisson_step(psi_in: Array, omega_in: Array) -> Array:
-            """One Jacobi iteration for the Poisson equation."""
-            psi_new = 0.25 * (
-                jnp.roll(psi_in, 1, axis=0)
-                + jnp.roll(psi_in, -1, axis=0)
-                + jnp.roll(psi_in, 1, axis=1)
-                + jnp.roll(psi_in, -1, axis=1)
-                + dx2 * omega_in
-            )
-            # Enforce psi = 0 on all walls
-            psi_new = psi_new.at[0, :].set(0.0)
-            psi_new = psi_new.at[-1, :].set(0.0)
-            psi_new = psi_new.at[:, 0].set(0.0)
-            psi_new = psi_new.at[:, -1].set(0.0)
-            return psi_new
-
-        def solve_poisson(psi_in: Array, omega_in: Array) -> Array:
-            """Solve Poisson equation with multiple Jacobi iterations."""
-
-            def body(
-                carry: tuple[Array, int], _: None
-            ) -> tuple[tuple[Array, int], None]:
-                p, i = carry
-                p = poisson_step(p, omega_in)
-                return (p, i + 1), None
-
-            (psi_out, _), _ = jax.lax.scan(
-                body, (psi_in, 0), None, length=poisson_iters
-            )
-            return psi_out
-
-        def step(
-            carry: tuple[Array, Array, int],
-            _: None,
-        ) -> tuple[tuple[Array, Array, int], tuple[Array, Array, Array]]:
-            omega_c, psi_c, step_idx = carry
-
-            # Solve Poisson for streamfunction
-            psi_c = solve_poisson(psi_c, omega_c)
-
-            # Velocity from streamfunction
-            u = (jnp.roll(psi_c, -1, axis=1) - jnp.roll(psi_c, 1, axis=1)) / (2.0 * dx)
-            v = -(jnp.roll(psi_c, -1, axis=0) - jnp.roll(psi_c, 1, axis=0)) / (2.0 * dx)
-
-            # Advection (central differences)
-            domega_dx = (
-                jnp.roll(omega_c, -1, axis=0) - jnp.roll(omega_c, 1, axis=0)
-            ) / (2.0 * dx)
-            domega_dy = (
-                jnp.roll(omega_c, -1, axis=1) - jnp.roll(omega_c, 1, axis=1)
-            ) / (2.0 * dx)
-
-            # Diffusion (Laplacian)
-            laplacian_omega = (
-                jnp.roll(omega_c, 1, axis=0)
-                + jnp.roll(omega_c, -1, axis=0)
-                + jnp.roll(omega_c, 1, axis=1)
-                + jnp.roll(omega_c, -1, axis=1)
-                - 4.0 * omega_c
-            ) / dx2
-
-            # Time step
-            omega_new = omega_c + dt * (
-                -u * domega_dx - v * domega_dy + nu * laplacian_omega
-            )
-
-            # Boundary conditions: no-slip walls
-            # Top wall (lid): omega from lid velocity
-            omega_new = omega_new.at[:, -1].set(
-                -2.0 * psi_c[:, -2] / dx2 - 2.0 * lid_velocity / dx
-            )
-            # Bottom wall
-            omega_new = omega_new.at[:, 0].set(-2.0 * psi_c[:, 1] / dx2)
-            # Left wall
-            omega_new = omega_new.at[0, :].set(-2.0 * psi_c[1, :] / dx2)
-            # Right wall
-            omega_new = omega_new.at[-1, :].set(-2.0 * psi_c[-2, :] / dx2)
-
-            # Recompute velocity for output
-            u_out = (jnp.roll(psi_c, -1, axis=1) - jnp.roll(psi_c, 1, axis=1)) / (
-                2.0 * dx
-            )
-            v_out = -(jnp.roll(psi_c, -1, axis=0) - jnp.roll(psi_c, 1, axis=0)) / (
-                2.0 * dx
-            )
-
-            # Enforce no-slip on velocity
-            u_out = u_out.at[0, :].set(0.0)
-            u_out = u_out.at[-1, :].set(0.0)
-            u_out = u_out.at[:, 0].set(0.0)
-            u_out = u_out.at[:, -1].set(lid_velocity)
-            v_out = v_out.at[0, :].set(0.0)
-            v_out = v_out.at[-1, :].set(0.0)
-            v_out = v_out.at[:, 0].set(0.0)
-            v_out = v_out.at[:, -1].set(0.0)
-
-            rho_out = jnp.ones((nx, ny))
-
-            return (omega_new, psi_c, step_idx + 1), (rho_out, u_out, v_out)
-
-        init = (omega, psi, 0)
-        _, (rho_all, ux_all, uy_all) = jax.lax.scan(step, init, None, length=n_steps)
-
-        # Subsample
-        if save_every > 1:
-            indices = jnp.arange(0, n_steps, save_every)
-            rho_all = rho_all[indices]
-            ux_all = ux_all[indices]
-            uy_all = uy_all[indices]
-
-        # Compute vorticity from saved velocity
-        duy_dx: Array = jnp.gradient(uy_all, axis=1)  # type: ignore[assignment]
-        dux_dy: Array = jnp.gradient(ux_all, axis=2)  # type: ignore[assignment]
-        vort = duy_dx - dux_dy
-
-        t = jnp.arange(rho_all.shape[0], dtype=jnp.float64) * save_every * dt
-
-        return FluidHistory(
-            t=t,
-            rho=rho_all,
-            ux=ux_all,
-            uy=uy_all,
-            vorticity=vort,
-            grid_x=grid_x,
-            grid_y=grid_y,
+        omega0 = (
+            jnp.zeros((nx, ny))
+            if initial_omega is None
+            else jnp.asarray(initial_omega, dtype=jnp.float64)
         )
+        if omega0.shape != (nx, ny):
+            raise ConfigurationError(
+                f"initial_omega shape {omega0.shape} != grid size {(nx, ny)}"
+            )
+
+        omega, ux, uy = _vorticity_rollout(
+            omega0,
+            dx,
+            dt,
+            nu,
+            lid_velocity,
+            poisson_iters=poisson_iters,
+            n_steps=n_steps,
+            save_every=save_every,
+        )
+        return FluidHistory(
+            t=dt * save_every * jnp.arange(omega.shape[0], dtype=jnp.float64),
+            rho=jnp.ones_like(ux),
+            ux=ux,
+            uy=uy,
+            vorticity=omega,
+            grid_x=jnp.arange(nx, dtype=jnp.float64) * dx,
+            grid_y=jnp.arange(ny, dtype=jnp.float64) * dx,
+        )
+
+
+def _solve_poisson(psi: Array, omega: Array, dx: float, n_iters: int) -> Array:
+    """Jacobi iterations for laplacian(psi) = -omega with psi = 0 on walls."""
+
+    def jacobi(_: int, p: Array) -> Array:
+        interior = (
+            0.25 * (p[2:, 1:-1] + p[:-2, 1:-1] + p[1:-1, 2:] + p[1:-1, :-2])
+            + 0.25 * dx**2 * omega[1:-1, 1:-1]
+        )
+        return jnp.zeros_like(p).at[1:-1, 1:-1].set(interior)
+
+    out: Array = jax.lax.fori_loop(0, n_iters, jacobi, psi)
+    return out
+
+
+def _velocity(psi: Array, dx: float, lid_velocity: float) -> tuple[Array, Array]:
+    """u = dpsi/dy, v = -dpsi/dx (central differences) with wall values."""
+    u = (
+        jnp.zeros_like(psi)
+        .at[1:-1, 1:-1]
+        .set((psi[1:-1, 2:] - psi[1:-1, :-2]) / (2.0 * dx))
+    )
+    v = (
+        jnp.zeros_like(psi)
+        .at[1:-1, 1:-1]
+        .set(-(psi[2:, 1:-1] - psi[:-2, 1:-1]) / (2.0 * dx))
+    )
+    return u.at[:, -1].set(lid_velocity), v
+
+
+@partial(jax.jit, static_argnames=("poisson_iters", "n_steps", "save_every"))
+def _vorticity_rollout(
+    omega0: Array,
+    dx: float,
+    dt: float,
+    nu: float,
+    lid_velocity: float,
+    *,
+    poisson_iters: int,
+    n_steps: int,
+    save_every: int,
+) -> tuple[Array, Array, Array]:
+    """Explicit-Euler vorticity transport; returns (omega, u, v) snapshots.
+
+    The carry holds ``(omega, psi)`` with ``psi`` solved from ``omega``, so
+    every snapshot is self-consistent.
+    """
+
+    def step(carry: tuple[Array, Array]) -> tuple[Array, Array]:
+        omega, psi = carry
+        u, v = _velocity(psi, dx, lid_velocity)
+
+        c = omega[1:-1, 1:-1]
+        domega_dx = (omega[2:, 1:-1] - omega[:-2, 1:-1]) / (2.0 * dx)
+        domega_dy = (omega[1:-1, 2:] - omega[1:-1, :-2]) / (2.0 * dx)
+        laplacian = (
+            omega[2:, 1:-1] + omega[:-2, 1:-1] + omega[1:-1, 2:] + omega[1:-1, :-2]
+        ) / dx**2 - 4.0 * c / dx**2
+        rhs = -u[1:-1, 1:-1] * domega_dx - v[1:-1, 1:-1] * domega_dy + nu * laplacian
+        omega = omega.at[1:-1, 1:-1].set(c + dt * rhs)
+
+        # Thom's wall vorticity (no-slip walls, moving lid at the top).
+        omega = omega.at[:, -1].set(-2.0 * psi[:, -2] / dx**2 - 2.0 * lid_velocity / dx)
+        omega = omega.at[:, 0].set(-2.0 * psi[:, 1] / dx**2)
+        omega = omega.at[0, :].set(-2.0 * psi[1, :] / dx**2)
+        omega = omega.at[-1, :].set(-2.0 * psi[-2, :] / dx**2)
+        return omega, _solve_poisson(psi, omega, dx, poisson_iters)
+
+    def observe(carry: tuple[Array, Array]) -> tuple[Array, Array, Array]:
+        omega, psi = carry
+        return (omega, *_velocity(psi, dx, lid_velocity))
+
+    psi0 = _solve_poisson(jnp.zeros_like(omega0), omega0, dx, poisson_iters)
+    out: tuple[Array, Array, Array] = strided_rollout(
+        step, (omega0, psi0), n_steps, save_every, observe
+    )
+    return out

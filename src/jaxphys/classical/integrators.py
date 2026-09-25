@@ -5,7 +5,8 @@ Symplectic integrators (leapfrog, Stormer-Verlet, Yoshida) preserve the
 geometric structure of Hamiltonian flow, yielding bounded energy error
 over exponentially long times.
 
-All integrators are JIT-compatible and differentiable through JAX.
+All fixed-step integrators are JIT-compatible and differentiable through
+JAX; ``adaptive_rk45`` performs host-side step control and runs eagerly.
 
 References:
     - Hairer, Lubich, Wanner. "Geometric Numerical Integration" (2006)
@@ -13,9 +14,15 @@ References:
 """
 
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
+import jax
+import jax.numpy as jnp
 from jax import Array
+
+from jaxphys._rollout import is_array_tree, strided_rollout
+from jaxphys.exceptions import ConfigurationError
 
 # Type alias for a derivative function: (q, p, t, params) -> (dq/dt, dp/dt)
 DerivFn = Callable[[Array, Array, float, Any], tuple[Array, Array]]
@@ -235,26 +242,19 @@ def yoshida4(
     c3 = c2
     c4 = c1
 
-    # Step 1
-    dq, _ = deriv_fn(q, p, t, params)
-    q = q + c1 * dt * dq
-    _, dp = deriv_fn(q, p, t + c1 * dt, params)
-    p = p + d1 * dt * dp
-
-    # Step 2
-    dq, _ = deriv_fn(q, p, t + (c1 + d1) * dt, params)
-    q = q + c2 * dt * dq
-    _, dp = deriv_fn(q, p, t + (c1 + d1 + c2) * dt, params)
-    p = p + d2 * dt * dp
-
-    # Step 3
-    dq, _ = deriv_fn(q, p, t + (c1 + d1 + c2 + d2) * dt, params)
-    q = q + c3 * dt * dq
-    _, dp = deriv_fn(q, p, t + (c1 + d1 + c2 + d2 + c3) * dt, params)
-    p = p + d3 * dt * dp
+    # Drift-kick composition. Time advances only with the drifts, so each
+    # kick is evaluated at the time reached by the preceding drifts
+    # (t + c1*dt, t + (c1+c2)*dt = t + dt/2, t + (c1+c2+c3)*dt).
+    t_q = t
+    for c, d in ((c1, d1), (c2, d2), (c3, d3)):
+        dq, _ = deriv_fn(q, p, t_q, params)
+        q = q + c * dt * dq
+        t_q = t_q + c * dt
+        _, dp = deriv_fn(q, p, t_q, params)
+        p = p + d * dt * dp
 
     # Final position update
-    dq, _ = deriv_fn(q, p, t + dt, params)
+    dq, _ = deriv_fn(q, p, t_q, params)
     q = q + c4 * dt * dq
 
     return q, p, t + dt
@@ -349,22 +349,23 @@ def adaptive_rk45(
         rtol: Relative tolerance for error control.
         safety: Safety factor for step-size updates (< 1).
         dt_min: Minimum allowed time step.
-        dt_max: Maximum allowed time step (defaults to *dt*).
+        dt_max: Unused; kept for backwards compatibility (the step taken
+            never exceeds *dt*).
         max_reject: Maximum consecutive rejected steps before giving up.
 
     Returns:
-        Tuple of (q_new, p_new, t_new) after one *accepted* step.
-        The actual step size used may differ from the input *dt*.
+        Tuple of (q_new, p_new, t_new) after one *accepted* step of size
+        ``t_new - t`` (at most *dt*; shrunk until the error estimate passes).
+
+    Note:
+        The accept/reject loop runs on the host, so this integrator is for
+        eager use only; it cannot be used inside ``jax.jit`` or by
+        ``HamiltonianSystem.simulate``/``LagrangianSystem.simulate``.
 
     References:
         Dormand, J. R.; Prince, P. J. "A family of embedded Runge-Kutta
         formulae", J. Comput. Appl. Math. 6(1), 19-26 (1980).
     """
-    import jax.numpy as _jnp
-
-    if dt_max is None:
-        dt_max = dt
-
     # --- Dormand-Prince Butcher tableau ---
     a21 = 1.0 / 5.0
     a31, a32 = 3.0 / 40.0, 9.0 / 40.0
@@ -447,28 +448,20 @@ def adaptive_rk45(
         err_p = h * (e1 * k1p + e3 * k3p + e4 * k4p + e5 * k5p + e6 * k6p + e7 * k7p)
 
         # Scaled error norm
-        scale_q = atol + rtol * _jnp.maximum(_jnp.abs(q), _jnp.abs(q5))
-        scale_p = atol + rtol * _jnp.maximum(_jnp.abs(p), _jnp.abs(p5))
-        err_norm_q = _jnp.sqrt(_jnp.mean((err_q / scale_q) ** 2))
-        err_norm_p = _jnp.sqrt(_jnp.mean((err_p / scale_p) ** 2))
-        err_norm = float(_jnp.maximum(err_norm_q, err_norm_p))
+        scale_q = atol + rtol * jnp.maximum(jnp.abs(q), jnp.abs(q5))
+        scale_p = atol + rtol * jnp.maximum(jnp.abs(p), jnp.abs(p5))
+        err_norm_q = jnp.sqrt(jnp.mean((err_q / scale_q) ** 2))
+        err_norm_p = jnp.sqrt(jnp.mean((err_p / scale_p) ** 2))
+        err_norm = float(jnp.maximum(err_norm_q, err_norm_p))
 
-        if err_norm <= 1.0:
-            # Accept step — compute new dt for next step
-            h_new = dt_max if err_norm < 1e-30 else h * safety * err_norm ** (-0.2)
-            h_new = min(h_new, dt_max)
-            h_new = max(h_new, dt_min)
-            # Store for potential next call (not used directly since we
-            # return a single step, but the caller can inspect t_new - t).
+        if err_norm <= 1.0 or rejects >= max_reject:
+            # Accept (or give up after max_reject rejections and accept the
+            # current best); q5/p5 were computed with step size h.
             return q5, p5, t + h
-        else:
-            # Reject step and shrink
-            h_new = h * safety * err_norm ** (-0.25)
-            h = max(h_new, dt_min)
-            rejects += 1
-            if rejects >= max_reject:
-                # Give up and accept the current best
-                return q5, p5, t + h
+
+        # Reject the step and shrink h for the next attempt.
+        h = max(h * safety * err_norm ** (-0.25), dt_min)
+        rejects += 1
 
 
 # Registry mapping integrator names to functions
@@ -502,3 +495,102 @@ def get_integrator(
         available = ", ".join(sorted(INTEGRATORS.keys()))
         raise ValueError(f"Unknown integrator '{name}'. Available: {available}")
     return INTEGRATORS[name]
+
+
+# Registered integrators that cannot drive ``simulate``'s compiled loop.
+_NOT_SCANNABLE = {
+    "velocity_verlet": (
+        "it takes an acceleration function a(q, v, t, params) rather than "
+        "Hamilton's equations; use 'leapfrog', which is the same kick-drift-"
+        "kick scheme"
+    ),
+    "adaptive_rk45": (
+        "its accept/reject loop runs on the host and cannot be compiled; "
+        "call adaptive_rk45 directly in a Python loop instead"
+    ),
+}
+
+EnergyFn = Callable[[Array, Array, Any], Array]
+
+
+def _rollout_impl(
+    step: Callable[..., tuple[Array, Array, Array]],
+    deriv_fn: DerivFn,
+    energy_fn: EnergyFn,
+    q0: Array,
+    p0: Array,
+    t0: Array,
+    dt: Array,
+    params: Any,
+    n_steps: int,
+    save_every: int,
+) -> tuple[Array, Array, Array, Array]:
+    def advance(carry: tuple[Array, Array, Array]) -> tuple[Array, Array, Array]:
+        q, p, t = carry
+        return step(deriv_fn, q, p, t, dt, params)
+
+    def observe(carry: tuple[Array, Array, Array]) -> tuple[Array, ...]:
+        q, p, t = carry
+        return q, p, t, energy_fn(q, p, params)
+
+    out: tuple[Array, Array, Array, Array] = strided_rollout(
+        advance, (q0, p0, t0), n_steps, save_every, observe
+    )
+    return out
+
+
+_STATIC = ("step", "deriv_fn", "energy_fn", "n_steps", "save_every")
+_rollout = jax.jit(_rollout_impl, static_argnames=_STATIC)
+
+
+def integrate_system(
+    integrator: str,
+    deriv_fn: DerivFn,
+    energy_fn: EnergyFn,
+    q0: Array,
+    p0: Array,
+    t_span: tuple[float, float],
+    dt: float,
+    params: Any,
+    save_every: int,
+) -> tuple[Array, Array, Array, Array]:
+    """Integrate ``(q, p)`` over ``t_span`` and return saved ``(q, p, t, E)``.
+
+    The loop is compiled once per (integrator, system, n_steps, save_every)
+    and reused across calls: ``q0``, ``p0``, ``dt`` and array-valued
+    ``params`` are traced arguments, so changing them does not recompile.
+    Rows are the states at steps ``0, save_every, 2*save_every, ...``.
+    """
+    step = get_integrator(integrator)
+    if integrator in _NOT_SCANNABLE:
+        raise ConfigurationError(
+            f"Integrator '{integrator}' cannot be used by simulate(): "
+            f"{_NOT_SCANNABLE[integrator]}."
+        )
+    t_start, t_end = t_span
+    if t_end <= t_start:
+        raise ConfigurationError(f"t_end ({t_end}) must be > t_start ({t_start})")
+    if dt <= 0:
+        raise ConfigurationError(f"dt must be positive, got {dt}")
+    if save_every < 1:
+        raise ConfigurationError(f"save_every must be >= 1, got {save_every}")
+    n_steps = int((t_end - t_start) / dt)
+    run: Callable[..., tuple[Array, Array, Array, Array]]
+    if is_array_tree(params):
+        run = partial(_rollout, params=params)
+    else:
+        # Arbitrary Python objects cannot be traced: close over them instead
+        # (this path recompiles on every call).
+        run = jax.jit(partial(_rollout_impl, params=params), static_argnames=_STATIC)
+    out: tuple[Array, Array, Array, Array] = run(
+        step=step,
+        deriv_fn=deriv_fn,
+        energy_fn=energy_fn,
+        q0=q0,
+        p0=p0,
+        t0=jnp.asarray(t_start, dtype=q0.dtype),
+        dt=jnp.asarray(dt, dtype=q0.dtype),
+        n_steps=n_steps,
+        save_every=save_every,
+    )
+    return out

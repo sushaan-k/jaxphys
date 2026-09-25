@@ -1,14 +1,17 @@
 """State representations for physics simulations.
 
-Provides immutable data containers for simulation states and trajectories,
-designed to be compatible with JAX transformations (jit, vmap, grad).
+Provides immutable data containers for simulation states and trajectories.
+Every container is registered as a JAX pytree, so it can be returned from
+``jax.jit``, batched with ``jax.vmap`` and differentiated with ``jax.grad``.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 from jax import Array
 
@@ -321,7 +324,7 @@ class QuantumResult:
     psi: Array
     x: Array
     potential: Array
-    transmission_coefficient: float | None = None
+    transmission_coefficient: float | Array | None = None
 
     @property
     def probability(self) -> Array:
@@ -430,3 +433,29 @@ class IsingResult:
     energies: Array
     specific_heats: Array
     susceptibilities: Array
+
+
+def _register_pytrees(*classes: type, meta: tuple[str, ...] = ("metadata",)) -> None:
+    for cls in classes:
+        names = [f.name for f in dataclasses.fields(cls)]
+        jax.tree_util.register_dataclass(
+            cls,
+            data_fields=[n for n in names if n not in meta],
+            meta_fields=[n for n in names if n in meta],
+        )
+
+
+_register_pytrees(
+    PhaseState,
+    Trajectory,
+    NBodyState,
+    NBodyTrajectory,
+    EMFieldState,
+    EMFieldHistory,
+    EMFieldHistory3D,
+    QuantumState,
+    QuantumResult,
+    FluidState,
+    FluidHistory,
+    IsingResult,
+)

@@ -6,6 +6,7 @@ ensuring physically meaningful values before computation begins.
 
 from typing import Any, Literal
 
+import jax
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -13,12 +14,16 @@ class Params(BaseModel):
     """Generic parameter container for physics simulations.
 
     Accepts arbitrary keyword arguments and exposes them as attributes.
-    Validated at construction time for NaN/Inf safety.
+    ``Params`` is registered as a JAX pytree (one leaf per field), so it can
+    be passed through ``jax.jit``/``jax.vmap`` and differentiated with
+    ``jax.grad``.
 
     Example:
         >>> params = Params(m1=1.0, m2=2.0, g=9.81)
         >>> params.m1
         1.0
+        >>> float(jax.grad(lambda p: p.m1 * p.g)(params).m1)
+        9.81
     """
 
     model_config = {"extra": "allow"}
@@ -31,6 +36,20 @@ class Params(BaseModel):
         if extra and name in extra:
             return extra[name]
         raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
+
+
+def _flatten_params(params: Params) -> tuple[list[Any], tuple[str, ...]]:
+    extra = params.__pydantic_extra__ or {}
+    keys = tuple(sorted(extra))
+    return [extra[k] for k in keys], keys
+
+
+def _unflatten_params(keys: tuple[str, ...], values: list[Any]) -> Params:
+    # model_construct skips validation so tracers can flow through.
+    return Params.model_construct(**dict(zip(keys, values, strict=True)))
+
+
+jax.tree_util.register_pytree_node(Params, _flatten_params, _unflatten_params)
 
 
 class SimulationConfig(BaseModel):

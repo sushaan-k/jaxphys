@@ -22,12 +22,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import partial
 from typing import cast
 
 import jax
 import jax.numpy as jnp
 from jax import Array
 
+from jaxphys._rollout import is_traced, strided_rollout
 from jaxphys.exceptions import ConfigurationError
 from jaxphys.state import QuantumResult
 
@@ -134,7 +136,9 @@ def solve_schrodinger(
 ) -> QuantumResult:
     """Solve the 1D time-dependent Schrodinger equation.
 
-    Uses the split-operator Fourier method for exact unitarity.
+    Uses the split-operator Fourier method for exact unitarity. The domain
+    is periodic: ``x`` samples ``[x_min, x_max)`` with spacing
+    ``(x_max - x_min) / n_points``.
 
     Args:
         psi0: Initial wavefunction (callable or array).
@@ -148,7 +152,10 @@ def solve_schrodinger(
         save_every: Save wavefunction every N steps.
 
     Returns:
-        QuantumResult with wavefunction history and diagnostics.
+        QuantumResult with the wavefunction at ``t_start + k*save_every*dt``.
+        For potentials with a ``center`` (e.g. :class:`SquareBarrier`), the
+        transmission coefficient is the final probability beyond
+        ``center + width/2``.
 
     Raises:
         ConfigurationError: If parameters are invalid.
@@ -158,34 +165,31 @@ def solve_schrodinger(
         raise ConfigurationError(f"x_max ({x_max}) must be > x_min ({x_min})")
 
     t_start, t_end = t_span
+    if dt <= 0:
+        raise ConfigurationError(f"dt must be positive, got {dt}")
+    if save_every < 1:
+        raise ConfigurationError(f"save_every must be >= 1, got {save_every}")
     n_steps = int((t_end - t_start) / dt)
 
-    # Spatial grid
+    # Periodic spatial grid: the FFT treats x_max as the image of x_min, so
+    # the endpoint is excluded and dx = L / n_points exactly.
+    x = jnp.linspace(x_min, x_max, n_points, endpoint=False)
     dx = (x_max - x_min) / n_points
-    x = jnp.linspace(x_min, x_max, n_points)
 
-    # Momentum grid (for FFT)
-    k = jnp.fft.fftfreq(n_points, d=dx) * 2.0 * jnp.pi
+    # Angular wavenumbers matching the FFT ordering.
+    k = 2.0 * jnp.pi * jnp.fft.fftfreq(n_points, d=dx)
 
-    # Potential on grid
-    V = potential(x)
+    V = jnp.asarray(potential(x))
 
-    # Initial wavefunction
     if callable(psi0):
-        psi = psi0(x).astype(jnp.complex128)
+        psi = jnp.asarray(psi0(x), dtype=jnp.complex128)
     else:
         psi = jnp.asarray(psi0, dtype=jnp.complex128)
+    if psi.shape != (n_points,):
+        raise ConfigurationError(f"psi0 must have shape ({n_points},), got {psi.shape}")
 
-    # Normalize
-    norm = jnp.sqrt(jnp.trapezoid(jnp.abs(psi) ** 2, x))
-    psi = psi / norm
-
-    # Split-operator propagators
-    # V half-step: exp(-i * V * dt / (2 * hbar))
-    exp_V_half = jnp.exp(-1j * V * dt / (2.0 * hbar))
-
-    # T full step: exp(-i * hbar * k^2 * dt / (2 * mass))
-    exp_T = jnp.exp(-1j * hbar * k**2 * dt / (2.0 * mass))
+    # Normalize with the same discrete norm the propagator conserves.
+    psi = psi / jnp.sqrt(jnp.sum(jnp.abs(psi) ** 2) * dx)
 
     logger.info(
         "Starting Schrodinger solver: n_points=%d, n_steps=%d, method=split_operator",
@@ -193,41 +197,20 @@ def solve_schrodinger(
         n_steps,
     )
 
-    def split_step(psi_c: Array, _: None) -> tuple[Array, Array]:
-        """One split-operator time step."""
-        # Half-step in V
-        psi_v = exp_V_half * psi_c
-        # Full step in T (momentum space)
-        psi_k = jnp.fft.fft(psi_v)
-        psi_k = exp_T * psi_k
-        psi_x = jnp.fft.ifft(psi_k)
-        # Half-step in V
-        psi_new = exp_V_half * psi_x
-        return psi_new, psi_new
+    psi_history = _split_operator_rollout(
+        psi, V, k**2, dt, hbar, mass, n_steps=n_steps, save_every=save_every
+    )
+    t_array = t_start + dt * jnp.arange(0, n_steps + 1, save_every)
 
-    _, psi_history = jax.lax.scan(split_step, psi, None, length=n_steps)
-
-    # Prepend initial state
-    psi_history = jnp.concatenate([psi[None, :], psi_history], axis=0)
-    t_array = jnp.linspace(t_start, t_end, n_steps + 1)
-
-    # Subsample
-    if save_every > 1:
-        indices = jnp.arange(0, n_steps + 1, save_every)
-        psi_history = psi_history[indices]
-        t_array = t_array[indices]
-
-    # Compute transmission coefficient (for barrier problems)
-    # Fraction of probability density past the barrier center
-    barrier_center = None
-    if isinstance(potential, SquareBarrier) or hasattr(potential, "center"):
-        barrier_center = potential.center
-
-    transmission = None
-    if barrier_center is not None:
+    # Transmission coefficient for barrier problems: probability found past
+    # the far edge of the barrier at the final saved time.
+    transmission: float | Array | None = None
+    center = getattr(potential, "center", None)
+    if center is not None:
+        edge = center + 0.5 * getattr(potential, "width", 0.0)
         final_prob = jnp.abs(psi_history[-1]) ** 2
-        mask = x > barrier_center + 1.0  # past the barrier
-        transmission = float(jnp.trapezoid(final_prob * mask, x))
+        transmitted = jnp.sum(jnp.where(x > edge, final_prob, 0.0)) * dx
+        transmission = transmitted if is_traced(transmitted) else float(transmitted)
 
     return QuantumResult(
         t=t_array,
@@ -236,3 +219,30 @@ def solve_schrodinger(
         potential=V,
         transmission_coefficient=transmission,
     )
+
+
+@partial(jax.jit, static_argnames=("n_steps", "save_every"))
+def _split_operator_rollout(
+    psi: Array,
+    V: Array,
+    k2: Array,
+    dt: float,
+    hbar: float,
+    mass: float,
+    *,
+    n_steps: int,
+    save_every: int,
+) -> Array:
+    """Strang-split propagation, saving every ``save_every`` steps (incl. t0).
+
+    Works in any dimension: ``k2`` is ``|k|^2`` on the FFT grid of ``psi``.
+    """
+    exp_V_half = jnp.exp(-1j * V * dt / (2.0 * hbar))
+    exp_T = jnp.exp(-1j * hbar * k2 * dt / (2.0 * mass))
+
+    def split_step(psi_c: Array) -> Array:
+        psi_k = exp_T * jnp.fft.fftn(exp_V_half * psi_c)
+        return exp_V_half * jnp.fft.ifftn(psi_k)
+
+    history: Array = strided_rollout(split_step, psi, n_steps, save_every, lambda p: p)
+    return history

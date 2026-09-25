@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -491,7 +491,8 @@ def optimize(
         OptimizeResult with optimal parameters.
     """
     x = jnp.asarray(initial_guess, dtype=jnp.float64)
-    grad_fn = jax.grad(objective)
+    # Compile the gradient once; every iteration then reuses the executable.
+    grad_fn = jax.jit(jax.grad(objective))
 
     logger.info(
         "Starting optimization: method=%s, lr=%.2e, max_iter=%d",
@@ -591,7 +592,7 @@ def _adam_optimize(
             return OptimizeResult(
                 x=x,
                 fun=float(objective(x)),
-                n_iterations=i,
+                n_iterations=i - 1,
                 converged=True,
                 trajectory=traj,
             )
@@ -637,44 +638,46 @@ def sensitivity(
     return cast(Array, jax.jacobian(simulation_fn)(params))
 
 
+class ProjectileResult(NamedTuple):
+    """Analytic projectile outcome (a pytree, so it can leave ``jax.jit``).
+
+    Attributes:
+        final_position: Horizontal landing position (equal to ``range``).
+        range: Horizontal range on flat ground.
+        time_of_flight: Time until the projectile returns to launch height.
+    """
+
+    final_position: Array
+    range: Array
+    time_of_flight: Array
+
+
 def projectile(
     v0: float | Array,
-    angle: float = 45.0,
+    angle: float | Array = 45.0,
     g: float = 9.81,
     dt: float = 0.01,
-) -> Any:
-    """Simple projectile simulation for optimization demos.
+) -> ProjectileResult:
+    """Closed-form projectile on flat ground, for optimization demos.
 
-    Simulates a projectile under constant gravity and returns
-    a result object with the final position.
+    Range ``R = v0^2 sin(2 theta) / g`` and time of flight
+    ``T = 2 v0 sin(theta) / g`` are evaluated analytically, so the result
+    is exactly differentiable in ``v0``, ``angle`` and ``g``.
 
     Args:
         v0: Initial speed.
         angle: Launch angle in degrees.
         g: Gravitational acceleration.
-        dt: Time step.
+        dt: Unused (the trajectory is analytic); kept for backwards
+            compatibility.
 
     Returns:
-        Object with final_position attribute.
+        ProjectileResult with the landing position, range and flight time.
     """
+    del dt
     angle_rad = jnp.radians(angle)
-    vx = v0 * jnp.cos(angle_rad)
-    vy = v0 * jnp.sin(angle_rad)
-
-    # Time of flight: t = 2 * vy / g
-    t_flight = 2.0 * vy / g
-
-    # Range: R = vx * t_flight
-    range_val = vx * t_flight
-
-    @dataclass
-    class _ProjectileResult:
-        final_position: Any
-        range: Any
-        time_of_flight: Any
-
-    return _ProjectileResult(
-        final_position=range_val,
-        range=range_val,
-        time_of_flight=t_flight,
+    t_flight = 2.0 * v0 * jnp.sin(angle_rad) / g
+    range_val = v0 * jnp.cos(angle_rad) * t_flight
+    return ProjectileResult(
+        final_position=range_val, range=range_val, time_of_flight=t_flight
     )

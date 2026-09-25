@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 from functools import partial
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -91,98 +92,6 @@ class IsingLattice:
             - 1
         )
 
-    def _compute_energy(self, spins: Array) -> float:
-        """Compute total energy of the spin configuration.
-
-        Args:
-            spins: Spin array, shape (Lx, Ly).
-
-        Returns:
-            Total energy.
-        """
-        J = self._config.J
-        h = self._config.h
-        # Nearest-neighbor interaction with periodic BC
-        energy = -J * jnp.sum(
-            spins * jnp.roll(spins, 1, axis=0) + spins * jnp.roll(spins, 1, axis=1)
-        )
-        energy = energy - h * jnp.sum(spins)
-        return float(energy)
-
-    def _compute_magnetization(self, spins: Array) -> float:
-        """Compute magnetization per spin.
-
-        Args:
-            spins: Spin array, shape (Lx, Ly).
-
-        Returns:
-            Absolute magnetization per spin.
-        """
-        return float(jnp.abs(jnp.mean(spins)))
-
-    @staticmethod
-    @partial(jax.jit, static_argnums=(3, 4))
-    def _metropolis_sweep(
-        spins: Array,
-        key: Array,
-        temperature: float,
-        Lx: int,
-        Ly: int,
-        J: float,
-        h: float,
-    ) -> tuple[Array, Array]:
-        """Perform one full Metropolis sweep over all spins.
-
-        A sweep consists of N = Lx * Ly single-spin-flip proposals.
-
-        Args:
-            spins: Current spin configuration.
-            key: PRNG key.
-            temperature: Temperature (in units of J/kB).
-            Lx: Lattice size x.
-            Ly: Lattice size y.
-            J: Coupling constant.
-            h: External field.
-
-        Returns:
-            (new_spins, new_key).
-        """
-        beta = 1.0 / temperature
-        n_spins = Lx * Ly
-
-        def single_flip(
-            carry: tuple[Array, Array], _: None
-        ) -> tuple[tuple[Array, Array], None]:
-            s, k = carry
-            k, k1, k2, k3 = jax.random.split(k, 4)
-
-            # Random site
-            ix = jax.random.randint(k1, (), 0, Lx)
-            iy = jax.random.randint(k2, (), 0, Ly)
-
-            # Local field from neighbors (periodic BC)
-            nn_sum = (
-                s[(ix + 1) % Lx, iy]
-                + s[(ix - 1) % Lx, iy]
-                + s[ix, (iy + 1) % Ly]
-                + s[ix, (iy - 1) % Ly]
-            )
-
-            # Energy change from flipping spin at (ix, iy)
-            dE = 2.0 * J * s[ix, iy] * nn_sum + 2.0 * h * s[ix, iy]
-
-            # Metropolis acceptance
-            accept = (dE < 0) | (jax.random.uniform(k3) < jnp.exp(-beta * dE))
-            new_spin = jnp.where(accept, -s[ix, iy], s[ix, iy])
-            s = s.at[ix, iy].set(new_spin)
-
-            return (s, k), None
-
-        (spins_new, key_new), _ = jax.lax.scan(
-            single_flip, (spins, key), None, length=n_spins
-        )
-        return spins_new, key_new
-
     def run_metropolis(
         self,
         temperature: float,
@@ -192,11 +101,17 @@ class IsingLattice:
     ) -> dict[str, float]:
         """Run Metropolis MC simulation at a given temperature.
 
+        The whole chain (warm-up and measurement) runs as one compiled
+        loop. On lattices with even side lengths a sweep is a checkerboard
+        update: all spins of one sublattice are proposed simultaneously,
+        which is valid because same-colour spins do not interact. Odd
+        lattices fall back to N random single-site proposals per sweep.
+
         Args:
             temperature: Temperature in units of J/kB.
             n_sweeps: Number of measurement sweeps.
             n_warmup: Number of warmup sweeps (discarded).
-            key: PRNG key. Uses random seed if None.
+            key: PRNG key. Uses ``PRNGKey(42)`` if None.
 
         Returns:
             Dictionary with mean energy, magnetization, specific heat,
@@ -209,36 +124,145 @@ class IsingLattice:
             key = jax.random.PRNGKey(42)
 
         key, init_key = jax.random.split(key)
-        spins = self.random_state(init_key)
+        energies, mags = _metropolis_chain(
+            self.random_state(init_key),
+            key,
+            1.0 / temperature,
+            self._config.J,
+            self._config.h,
+            n_warmup=n_warmup,
+            n_sweeps=n_sweeps,
+        )
+        stats = _thermo_stats(energies, mags, temperature, self.n_spins)
+        return {name: float(value) for name, value in stats.items()}
 
-        J = self._config.J
-        h = self._config.h
-        Lx, Ly = self._Lx, self._Ly
-        N = self.n_spins
 
-        # Warmup
-        for _ in range(n_warmup):
-            spins, key = self._metropolis_sweep(spins, key, temperature, Lx, Ly, J, h)
+def _energy(spins: Array, J: float | Array, h: float | Array) -> Array:
+    """Total Ising energy with periodic boundaries."""
+    bonds = spins * jnp.roll(spins, 1, axis=0) + spins * jnp.roll(spins, 1, axis=1)
+    return -J * jnp.sum(bonds) - h * jnp.sum(spins)
 
-        # Measurement
-        energies = []
-        magnetizations = []
-        for _ in range(n_sweeps):
-            spins, key = self._metropolis_sweep(spins, key, temperature, Lx, Ly, J, h)
-            energies.append(self._compute_energy(spins) / N)
-            magnetizations.append(self._compute_magnetization(spins))
 
-        e_arr = jnp.array(energies)
-        m_arr = jnp.array(magnetizations)
+def _observables(
+    spins: Array, J: float | Array, h: float | Array
+) -> tuple[Array, Array]:
+    """Energy per spin and absolute magnetization per spin."""
+    return _energy(spins, J, h) / spins.size, jnp.abs(jnp.mean(spins, dtype=float))
 
-        beta = 1.0 / temperature
 
-        return {
-            "energy": float(jnp.mean(e_arr)),
-            "magnetization": float(jnp.mean(m_arr)),
-            "specific_heat": float(beta**2 * N * jnp.var(e_arr)),
-            "susceptibility": float(beta * N * jnp.var(m_arr)),
-        }
+def _thermo_stats(
+    energies: Array, mags: Array, temperature: float | Array, n_spins: int
+) -> dict[str, Array]:
+    """Means of e/N and |m| and their fluctuation estimates of C_v and chi.
+
+    Reduces over the last axis, so a batch of chains gives one value each.
+    """
+    beta = 1.0 / jnp.asarray(temperature)
+    return {
+        "energy": jnp.mean(energies, axis=-1),
+        "magnetization": jnp.mean(mags, axis=-1),
+        "specific_heat": beta**2 * n_spins * jnp.var(energies, axis=-1),
+        "susceptibility": beta * n_spins * jnp.var(mags, axis=-1),
+    }
+
+
+def _checkerboard_sweep(
+    spins: Array, key: Array, beta: Array | float, J: float, h: float
+) -> tuple[Array, Array]:
+    """One Metropolis sweep as two sublattice (checkerboard) half-sweeps."""
+    Lx, Ly = spins.shape
+    parity = (jnp.arange(Lx)[:, None] + jnp.arange(Ly)[None, :]) % 2
+    for color in (0, 1):
+        key, sub = jax.random.split(key)
+        nn_sum = (
+            jnp.roll(spins, 1, axis=0)
+            + jnp.roll(spins, -1, axis=0)
+            + jnp.roll(spins, 1, axis=1)
+            + jnp.roll(spins, -1, axis=1)
+        )
+        dE = 2.0 * spins * (J * nn_sum + h)
+        accept = jax.random.uniform(sub, spins.shape) < jnp.exp(-beta * dE)
+        spins = jnp.where((parity == color) & accept, -spins, spins)
+    return spins, key
+
+
+def _random_site_sweep(
+    spins: Array, key: Array, beta: Array | float, J: float, h: float
+) -> tuple[Array, Array]:
+    """One Metropolis sweep of N sequential random single-site proposals."""
+    Lx, Ly = spins.shape
+
+    def single_flip(_: int, carry: tuple[Array, Array]) -> tuple[Array, Array]:
+        s, k = carry
+        k, k1, k2, k3 = jax.random.split(k, 4)
+        ix = jax.random.randint(k1, (), 0, Lx)
+        iy = jax.random.randint(k2, (), 0, Ly)
+        nn_sum = (
+            s[(ix + 1) % Lx, iy]
+            + s[(ix - 1) % Lx, iy]
+            + s[ix, (iy + 1) % Ly]
+            + s[ix, (iy - 1) % Ly]
+        )
+        dE = 2.0 * s[ix, iy] * (J * nn_sum + h)
+        accept = jax.random.uniform(k3) < jnp.exp(-beta * dE)
+        return s.at[ix, iy].set(jnp.where(accept, -s[ix, iy], s[ix, iy])), k
+
+    out: tuple[Array, Array] = jax.lax.fori_loop(0, Lx * Ly, single_flip, (spins, key))
+    return out
+
+
+@partial(jax.jit, static_argnames=("n_warmup", "n_sweeps"))
+def _metropolis_chain(
+    spins: Array,
+    key: Array,
+    beta: float,
+    J: float,
+    h: float,
+    *,
+    n_warmup: int,
+    n_sweeps: int,
+) -> tuple[Array, Array]:
+    """Warm up, then record (energy/N, |m|) after each measurement sweep."""
+    Lx, Ly = spins.shape
+    sweep = _checkerboard_sweep if Lx % 2 == 0 and Ly % 2 == 0 else _random_site_sweep
+
+    def advance(_: int, carry: tuple[Array, Array]) -> tuple[Array, Array]:
+        return sweep(carry[0], carry[1], beta, J, h)
+
+    carry = jax.lax.fori_loop(0, n_warmup, advance, (spins, key))
+
+    def measure(carry: tuple[Array, Array], _: None) -> tuple[Any, Any]:
+        carry = advance(0, carry)
+        return carry, _observables(carry[0], J, h)
+
+    _, (energies, mags) = jax.lax.scan(measure, carry, None, length=n_sweeps)
+    return energies, mags
+
+
+@partial(jax.jit, static_argnames=("n_warmup", "n_sweeps"))
+def _wolff_chain(
+    spins: Array,
+    key: Array,
+    temperature: float,
+    J: float,
+    *,
+    n_warmup: int,
+    n_sweeps: int,
+) -> tuple[Array, Array]:
+    """Wolff analogue of :func:`_metropolis_chain` (one cluster flip per sweep)."""
+
+    def advance(_: int, carry: tuple[Array, Array]) -> tuple[Array, Array]:
+        out: tuple[Array, Array] = wolff_step(carry[0], temperature, J, carry[1])
+        return out
+
+    carry = jax.lax.fori_loop(0, n_warmup, advance, (spins, key))
+
+    def measure(carry: tuple[Array, Array], _: None) -> tuple[Any, Any]:
+        carry = advance(0, carry)
+        return carry, _observables(carry[0], J, 0.0)
+
+    _, (energies, mags) = jax.lax.scan(measure, carry, None, length=n_sweeps)
+    return energies, mags
 
 
 def sweep_temperatures(
@@ -251,8 +275,8 @@ def sweep_temperatures(
 ) -> IsingResult:
     """Run Ising model simulations across a range of temperatures.
 
-    Iterates over each temperature sequentially, running a full
-    Metropolis or Wolff cluster Monte Carlo simulation at each one.
+    All temperatures run as independent chains in a single ``jax.vmap``-ed,
+    compiled call, so the sweep is parallel across temperatures.
 
     Args:
         lattice: IsingLattice instance.
@@ -260,7 +284,8 @@ def sweep_temperatures(
         n_sweeps: Measurement sweeps per temperature.
         n_warmup: Warmup sweeps per temperature.
         algorithm: "metropolis" or "wolff_cluster". Wolff updates are
-            implemented for zero-field Ising models.
+            implemented for zero-field Ising models; one Wolff "sweep" is
+            one cluster flip.
         key: PRNG key.
 
     Returns:
@@ -270,55 +295,49 @@ def sweep_temperatures(
         raise ConfigurationError(
             f"Unknown algorithm '{algorithm}'. Choose 'metropolis' or 'wolff_cluster'."
         )
+    if algorithm == "wolff_cluster" and lattice._config.h != 0.0:
+        raise ConfigurationError("wolff_cluster requires h=0.0")
 
     if key is None:
         key = jax.random.PRNGKey(0)
 
-    temperatures = jnp.asarray(temperatures)
-    n_temps = temperatures.shape[0]
+    temperatures = jnp.asarray(temperatures, dtype=jnp.float64)
+    if temperatures.ndim != 1 or temperatures.shape[0] == 0:
+        raise ConfigurationError("temperatures must be a non-empty 1D array")
+    if bool(jnp.any(temperatures <= 0)):
+        raise ConfigurationError("All temperatures must be positive")
 
     logger.info(
         "Running temperature sweep: n_temps=%d, n_sweeps=%d, lattice=%dx%d",
-        n_temps,
+        temperatures.shape[0],
         n_sweeps,
         lattice.size[0],
         lattice.size[1],
     )
 
-    energies = []
-    magnetizations = []
-    specific_heats = []
-    susceptibilities = []
+    J, h = lattice._config.J, lattice._config.h
 
-    for i in range(n_temps):
-        T = float(temperatures[i])
-        key, subkey = jax.random.split(key)
+    def one_temperature(k: Array, T: Array) -> tuple[Array, Array]:
+        k, init_key = jax.random.split(k)
+        spins = lattice.random_state(init_key)
+        chain: tuple[Array, Array]
         if algorithm == "metropolis":
-            result = lattice.run_metropolis(
-                temperature=T,
-                n_sweeps=n_sweeps,
-                n_warmup=n_warmup,
-                key=subkey,
+            chain = _metropolis_chain(
+                spins, k, 1.0 / T, J, h, n_warmup=n_warmup, n_sweeps=n_sweeps
             )
         else:
-            result = _run_wolff_temperature(
-                lattice=lattice,
-                temperature=T,
-                n_sweeps=n_sweeps,
-                n_warmup=n_warmup,
-                key=subkey,
-            )
-        energies.append(result["energy"])
-        magnetizations.append(result["magnetization"])
-        specific_heats.append(result["specific_heat"])
-        susceptibilities.append(result["susceptibility"])
+            chain = _wolff_chain(spins, k, T, J, n_warmup=n_warmup, n_sweeps=n_sweeps)
+        return chain
 
+    keys = jax.random.split(key, temperatures.shape[0])
+    energies, mags = jax.jit(jax.vmap(one_temperature))(keys, temperatures)
+    stats = _thermo_stats(energies, mags, temperatures, lattice.n_spins)
     return IsingResult(
         temperatures=temperatures,
-        magnetizations=jnp.array(magnetizations),
-        energies=jnp.array(energies),
-        specific_heats=jnp.array(specific_heats),
-        susceptibilities=jnp.array(susceptibilities),
+        magnetizations=stats["magnetization"],
+        energies=stats["energy"],
+        specific_heats=stats["specific_heat"],
+        susceptibilities=stats["susceptibility"],
     )
 
 
@@ -331,38 +350,21 @@ def _run_wolff_temperature(
 ) -> dict[str, float]:
     """Run a Wolff-cluster Monte Carlo simulation at one temperature."""
     if lattice._config.h != 0.0:
-        raise ConfigurationError(
-            "wolff_cluster in sweep_temperatures currently requires h=0.0"
-        )
-
+        raise ConfigurationError("wolff_cluster requires h=0.0")
     if temperature <= 0:
         raise ConfigurationError(f"Temperature must be positive, got {temperature}")
 
     key, init_key = jax.random.split(key)
-    spins = lattice.random_state(init_key)
-    J = lattice._config.J
-    N = lattice.n_spins
-
-    for _ in range(n_warmup):
-        spins, key = wolff_step(spins, temperature, J, key)
-
-    energies = []
-    magnetizations = []
-    for _ in range(n_sweeps):
-        spins, key = wolff_step(spins, temperature, J, key)
-        energies.append(lattice._compute_energy(spins) / N)
-        magnetizations.append(lattice._compute_magnetization(spins))
-
-    e_arr = jnp.array(energies)
-    m_arr = jnp.array(magnetizations)
-    beta = 1.0 / temperature
-
-    return {
-        "energy": float(jnp.mean(e_arr)),
-        "magnetization": float(jnp.mean(m_arr)),
-        "specific_heat": float(beta**2 * N * jnp.var(e_arr)),
-        "susceptibility": float(beta * N * jnp.var(m_arr)),
-    }
+    energies, mags = _wolff_chain(
+        lattice.random_state(init_key),
+        key,
+        temperature,
+        lattice._config.J,
+        n_warmup=n_warmup,
+        n_sweeps=n_sweeps,
+    )
+    stats = _thermo_stats(energies, mags, temperature, lattice.n_spins)
+    return {name: float(value) for name, value in stats.items()}
 
 
 def vmap_temperatures(

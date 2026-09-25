@@ -29,7 +29,8 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
-from jaxphys.classical.integrators import get_integrator
+from jaxphys._rollout import is_traced
+from jaxphys.classical.integrators import integrate_system
 from jaxphys.exceptions import (
     ConfigurationError,
     NumericalInstabilityError,
@@ -202,12 +203,6 @@ class LagrangianSystem:
                 f"qdot0 shape {qdot.shape} != expected ({self._n_dof},)"
             )
 
-        t_start, t_end = t_span
-        if t_end <= t_start:
-            raise ConfigurationError(f"t_end ({t_end}) must be > t_start ({t_start})")
-        if dt <= 0:
-            raise ConfigurationError(f"dt must be positive, got {dt}")
-
         if integrator in _SYMPLECTIC_INTEGRATORS:
             raise ConfigurationError(
                 f"Integrator '{integrator}' is not compatible with "
@@ -216,76 +211,28 @@ class LagrangianSystem:
                 "updates. Use 'rk4' or a Hamiltonian formulation instead."
             )
 
-        integrate_step = get_integrator(integrator)
-        n_steps = int((t_end - t_start) / dt)
-
         logger.info(
-            "Starting Lagrangian simulation: n_dof=%d, n_steps=%d, integrator=%s",
+            "Starting Lagrangian simulation: n_dof=%d, integrator=%s",
             self._n_dof,
-            n_steps,
             integrator,
         )
+        q_hist, p_hist, t_hist, e_hist = integrate_system(
+            integrator,
+            self._deriv_fn,
+            self.energy,
+            q,
+            qdot,
+            t_span,
+            dt,
+            params,
+            save_every,
+        )
 
-        # JIT-compile the full scan loop.  All Python-level objects
-        # (params, integrator function, dt) are captured in the closure
-        # so JAX only traces them once per unique (shape, dtype) combo.
-        @jax.jit
-        def _run_scan(
-            q_init: Array, p_init: Array, t_init: float
-        ) -> tuple[Array, Array, Array, Array]:
-            def scan_step(
-                carry: tuple[Array, Array, float],
-                _: None,
-            ) -> tuple[
-                tuple[Array, Array, float],
-                tuple[Array, Array, Array, Array],
-            ]:
-                q_c, p_c, t_c = carry
-                q_new, p_new, t_new = integrate_step(
-                    self._deriv_fn, q_c, p_c, t_c, dt, params
-                )
-                e = self.energy(q_new, p_new, params)
-                return (q_new, p_new, t_new), (
-                    q_new,
-                    p_new,
-                    jnp.asarray(t_new),
-                    e,
-                )
-
-            init_carry = (q_init, p_init, t_init)
-            _, (q_h, p_h, t_h, e_h) = jax.lax.scan(
-                scan_step, init_carry, None, length=n_steps
-            )
-            return q_h, p_h, t_h, e_h
-
-        q_hist, p_hist, t_hist, e_hist = _run_scan(q, qdot, t_start)
-
-        # Prepend initial state
-        e0 = self.energy(q, qdot, params)
-        q_hist = jnp.concatenate([q[jnp.newaxis, :], q_hist], axis=0)
-        p_hist = jnp.concatenate([qdot[jnp.newaxis, :], p_hist], axis=0)
-        t_hist = jnp.concatenate([jnp.array([t_start]), t_hist], axis=0)
-        e_hist = jnp.concatenate([jnp.array([e0]), e_hist], axis=0)
-
-        # Subsample if save_every > 1
-        if save_every > 1:
-            indices = jnp.arange(0, n_steps + 1, save_every)
-            q_hist = q_hist[indices]
-            p_hist = p_hist[indices]
-            t_hist = t_hist[indices]
-            e_hist = e_hist[indices]
-
-        # Check for NaN
-        if jnp.any(jnp.isnan(q_hist)):
+        if not is_traced(q_hist) and bool(jnp.any(jnp.isnan(q_hist))):
             raise NumericalInstabilityError(
                 f"NaN detected in trajectory. Try reducing dt "
                 f"(currently {dt}) or using a symplectic integrator."
             )
-
-        logger.info(
-            "Simulation complete. Energy drift: %.2e",
-            float(jnp.abs((e_hist[-1] - e_hist[0]) / (jnp.abs(e_hist[0]) + 1e-30))),
-        )
 
         return Trajectory(
             t=t_hist,

@@ -29,12 +29,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import partial
 from typing import Literal
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
 
+from jaxphys._rollout import strided_rollout
 from jaxphys.config import FluidConfig
 from jaxphys.exceptions import ConfigurationError
 from jaxphys.state import FluidHistory
@@ -72,6 +75,9 @@ class D2Q9:
     # Opposite direction indices (for bounce-back)
     opposite: tuple[int, ...] = (0, 3, 4, 1, 2, 7, 8, 5, 6)
 
+    # Direction indices with the y-component reversed (specular reflection)
+    mirror_y: tuple[int, ...] = (0, 1, 4, 3, 2, 8, 7, 6, 5)
+
 
 @dataclass(frozen=True)
 class Obstacle:
@@ -87,8 +93,11 @@ class Obstacle:
 class LBMGrid:
     """2D Lattice Boltzmann simulation grid.
 
-    Implements the D2Q9 BGK scheme for incompressible flow with
-    optional solid obstacles (bounce-back boundaries).
+    Implements the D2Q9 BGK scheme for channel flow in x: a Zou-He
+    velocity inlet at ``x = 0`` and a zero-gradient outlet at ``x = nx - 1``.
+    Solid obstacles use full-way bounce-back. ``boundary`` selects the
+    y edges: ``"periodic"``, ``"no_slip"`` (bounce-back walls on the first
+    and last rows) or ``"free_slip"`` (specular-reflection walls).
 
     Example:
         >>> grid = LBMGrid(size=(200, 100), viscosity=0.02)
@@ -105,7 +114,7 @@ class LBMGrid:
         size: Grid dimensions (nx, ny) in lattice units.
         viscosity: Kinematic viscosity in lattice units. Must satisfy
             tau = 3*nu + 0.5 > 0.5 for stability.
-        boundary: Boundary condition type for domain edges.
+        boundary: Boundary condition for the y edges (see above).
     """
 
     def __init__(
@@ -176,8 +185,8 @@ class LBMGrid:
         """Run the LBM simulation.
 
         Initializes with uniform flow in the x-direction at the given
-        inlet velocity. Uses the BGK collision operator with bounce-back
-        on obstacles.
+        inlet velocity (unless initial fields are given) and applies the
+        BGK collision operator with bounce-back on solids.
 
         Args:
             n_steps: Number of time steps to simulate.
@@ -189,135 +198,140 @@ class LBMGrid:
             initial_uy: Optional initial y-velocity, shape (nx, ny).
 
         Returns:
-            FluidHistory with density, velocity, and vorticity snapshots.
+            FluidHistory with snapshots at lattice times
+            ``t = k * save_every`` for ``k = 0 .. n_steps // save_every``.
+            Velocities are zero on solid nodes.
         """
         if u_inlet >= 0.3:
             raise ConfigurationError(
                 f"Inlet velocity {u_inlet} too high for LBM stability. "
                 "Keep u_inlet << 0.577 (speed of sound). Recommended < 0.1."
             )
+        if save_every < 1:
+            raise ConfigurationError(f"save_every must be >= 1, got {save_every}")
 
         nx, ny = self._nx, self._ny
-        tau = self._tau
-        omega = 1.0 / tau
-        lattice = self._lattice
-        c = lattice.c
-        w = lattice.w
-        opp = jnp.array(lattice.opposite)
-
-        obstacle_mask = self._build_obstacle_mask()
-
         logger.info(
             "Starting LBM simulation: grid=%dx%d, tau=%.3f, u_inlet=%.4f, n_steps=%d",
             nx,
             ny,
-            tau,
+            self._tau,
             u_inlet,
             n_steps,
         )
 
-        # Initialize macroscopic fields
+        lattice = self._lattice
+        cx, cy = lattice.c[:, 0], lattice.c[:, 1]
         rho = jnp.ones((nx, ny)) if initial_rho is None else initial_rho
         ux = jnp.full((nx, ny), u_inlet) if initial_ux is None else initial_ux
         uy = jnp.zeros((nx, ny)) if initial_uy is None else initial_uy
 
-        # Initialize distribution to equilibrium
-        cx = jnp.array([int(c[i, 0]) for i in range(9)])
-        cy = jnp.array([int(c[i, 1]) for i in range(9)])
-        f = _compute_equilibrium(rho, ux, uy, cx, cy, w)
+        obstacle = self._build_obstacle_mask()
+        wall = jnp.zeros((nx, ny), dtype=bool)
+        if self._config.boundary != "periodic":
+            wall = wall.at[:, 0].set(True).at[:, -1].set(True)
+        # Per-node reflection applied to solids after streaming.
+        if self._config.boundary == "free_slip":
+            reflect = jnp.where(
+                obstacle[..., None],
+                jnp.array(lattice.opposite),
+                jnp.where(wall[..., None], jnp.array(lattice.mirror_y), jnp.arange(9)),
+            )
+        else:
+            reflect = jnp.where(
+                (obstacle | wall)[..., None], jnp.array(lattice.opposite), jnp.arange(9)
+            )
+        solid = obstacle | wall
 
-        # Zero velocity inside obstacles
-        f = jnp.where(
-            obstacle_mask[..., jnp.newaxis], w[jnp.newaxis, jnp.newaxis, :], f
+        f0 = _compute_equilibrium(rho, ux, uy, cx, cy, lattice.w)
+        f0 = jnp.where(solid[..., None], lattice.w, f0)
+
+        rho_h, ux_h, uy_h, vort_h = _lbm_rollout(
+            f0,
+            solid,
+            reflect,
+            1.0 / self._tau,
+            u_inlet,
+            n_steps=n_steps,
+            save_every=save_every,
         )
-
-        grid_x = jnp.arange(nx, dtype=jnp.float64)
-        grid_y = jnp.arange(ny, dtype=jnp.float64)
-
-        # Precompute integer velocity components for use in JAX-traced code
-        cx = jnp.array([int(c[i, 0]) for i in range(9)])
-        cy = jnp.array([int(c[i, 1]) for i in range(9)])
-
-        # Precompute streaming shift tuples (static, not traced)
-        stream_shifts = [(int(c[i, 0]), int(c[i, 1])) for i in range(9)]
-
-        def step(
-            carry: tuple[Array, int],
-            _: None,
-        ) -> tuple[tuple[Array, int], tuple[Array, Array, Array]]:
-            f_c, step_idx = carry
-
-            # Collision: BGK
-            rho_c = jnp.sum(f_c, axis=-1)
-            ux_c = jnp.sum(f_c * cx, axis=-1) / rho_c
-            uy_c = jnp.sum(f_c * cy, axis=-1) / rho_c
-
-            f_eq = _compute_equilibrium(rho_c, ux_c, uy_c, cx, cy, w)
-            f_out = f_c - omega * (f_c - f_eq)
-
-            # Bounce-back on obstacles: swap populations to opposite direction
-            f_bounce = f_out[..., opp]
-            f_out = jnp.where(obstacle_mask[..., jnp.newaxis], f_bounce, f_out)
-
-            # Streaming: shift each population by its velocity vector
-            f_new = _stream(f_out, stream_shifts)
-
-            # Inlet boundary (Zou-He, left wall): fixed velocity
-            # Directions: 0=rest, 1=E, 2=N, 3=W, 4=S, 5=NE, 6=NW, 7=SW, 8=SE
-            rho_inlet = (
-                (f_new[0, :, 0] + f_new[0, :, 2] + f_new[0, :, 4])
-                + 2.0 * (f_new[0, :, 3] + f_new[0, :, 6] + f_new[0, :, 7])
-            ) / (1.0 - u_inlet)
-            f_new = f_new.at[0, :, 1].set(
-                f_new[0, :, 3] + (2.0 / 3.0) * rho_inlet * u_inlet
-            )
-            f_new = f_new.at[0, :, 5].set(
-                f_new[0, :, 7]
-                - 0.5 * (f_new[0, :, 2] - f_new[0, :, 4])
-                + (1.0 / 6.0) * rho_inlet * u_inlet
-            )
-            f_new = f_new.at[0, :, 8].set(
-                f_new[0, :, 6]
-                + 0.5 * (f_new[0, :, 2] - f_new[0, :, 4])
-                + (1.0 / 6.0) * rho_inlet * u_inlet
-            )
-
-            # Outlet boundary (zero-gradient, right wall)
-            f_new = f_new.at[-1, :, :].set(f_new[-2, :, :])
-
-            # Recompute macroscopic for output
-            rho_out = jnp.sum(f_new, axis=-1)
-            ux_out = jnp.sum(f_new * c[:, 0], axis=-1) / rho_out
-            uy_out = jnp.sum(f_new * c[:, 1], axis=-1) / rho_out
-
-            return (f_new, step_idx + 1), (rho_out, ux_out, uy_out)
-
-        init = (f, 0)
-        _, (rho_all, ux_all, uy_all) = jax.lax.scan(step, init, None, length=n_steps)
-
-        # Subsample
-        if save_every > 1:
-            indices = jnp.arange(0, n_steps, save_every)
-            rho_all = rho_all[indices]
-            ux_all = ux_all[indices]
-            uy_all = uy_all[indices]
-
-        # Compute vorticity: d(uy)/dx - d(ux)/dy
-        duy_dx: Array = jnp.gradient(uy_all, axis=1)  # type: ignore[assignment]
-        dux_dy: Array = jnp.gradient(ux_all, axis=2)  # type: ignore[assignment]
-        vort = duy_dx - dux_dy
-
-        t = jnp.arange(rho_all.shape[0], dtype=jnp.float64) * save_every
-
         return FluidHistory(
-            t=t,
-            rho=rho_all,
-            ux=ux_all,
-            uy=uy_all,
-            vorticity=vort,
-            grid_x=grid_x,
-            grid_y=grid_y,
+            t=save_every * jnp.arange(rho_h.shape[0], dtype=jnp.float64),
+            rho=rho_h,
+            ux=ux_h,
+            uy=uy_h,
+            vorticity=vort_h,
+            grid_x=jnp.arange(nx, dtype=jnp.float64),
+            grid_y=jnp.arange(ny, dtype=jnp.float64),
         )
+
+
+@partial(jax.jit, static_argnames=("n_steps", "save_every"))
+def _lbm_rollout(
+    f0: Array,
+    solid: Array,
+    reflect: Array,
+    omega: float,
+    u_inlet: float,
+    *,
+    n_steps: int,
+    save_every: int,
+) -> tuple[Array, Array, Array, Array]:
+    """BGK rollout; returns (rho, ux, uy, vorticity) snapshots."""
+    c = D2Q9.c
+    cx, cy = c[:, 0], c[:, 1]
+    fluid_inlet = ~solid[0, :]
+
+    def macroscopic(f: Array) -> tuple[Array, Array, Array]:
+        rho = jnp.sum(f, axis=-1)
+        return rho, (f @ cx) / rho, (f @ cy) / rho
+
+    def step(f: Array) -> Array:
+        rho, ux, uy = macroscopic(f)
+        f_eq = _compute_equilibrium(rho, ux, uy, cx, cy, D2Q9.w)
+        f_post = f - omega * (f - f_eq)
+        # Full-way bounce-back / specular reflection: the populations that
+        # streamed into a solid node are sent back unchanged (no collision).
+        f_post = jnp.where(
+            solid[..., None], jnp.take_along_axis(f, reflect, axis=-1), f_post
+        )
+        f = _stream(f_post)
+
+        # Zou-He velocity inlet on the fluid nodes of the left edge.
+        # Directions: 0=rest, 1=E, 2=N, 3=W, 4=S, 5=NE, 6=NW, 7=SW, 8=SE
+        col = f[0]
+        rho_in = (
+            col[:, 0]
+            + col[:, 2]
+            + col[:, 4]
+            + 2.0 * (col[:, 3] + col[:, 6] + col[:, 7])
+        ) / (1.0 - u_inlet)
+        shear = 0.5 * (col[:, 2] - col[:, 4])
+        inlet = (
+            col.at[:, 1]
+            .set(col[:, 3] + (2.0 / 3.0) * rho_in * u_inlet)
+            .at[:, 5]
+            .set(col[:, 7] - shear + (1.0 / 6.0) * rho_in * u_inlet)
+            .at[:, 8]
+            .set(col[:, 6] + shear + (1.0 / 6.0) * rho_in * u_inlet)
+        )
+        f = f.at[0].set(jnp.where(fluid_inlet[:, None], inlet, col))
+        # Zero-gradient outlet on the right edge.
+        return f.at[-1].set(f[-2])
+
+    def observe(f: Array) -> tuple[Array, Array, Array, Array]:
+        rho, ux, uy = macroscopic(f)
+        ux = jnp.where(solid, 0.0, ux)
+        uy = jnp.where(solid, 0.0, uy)
+        duy_dx: Array = jnp.gradient(uy, axis=0)  # type: ignore[assignment]
+        dux_dy: Array = jnp.gradient(ux, axis=1)  # type: ignore[assignment]
+        vort = duy_dx - dux_dy
+        return rho, ux, uy, vort
+
+    out: tuple[Array, Array, Array, Array] = strided_rollout(
+        step, f0, n_steps, save_every, observe
+    )
+    return out
 
 
 def _compute_equilibrium(
@@ -350,22 +364,20 @@ def _compute_equilibrium(
     return f_eq
 
 
-def _stream(f: Array, shifts: list[tuple[int, int]]) -> Array:
-    """Stream populations along their velocity vectors.
+def _stream(f: Array) -> Array:
+    """Stream each population one lattice step along its velocity.
 
-    Each population f[..., i] is shifted by the corresponding
-    velocity using periodic boundary conditions (jnp.roll).
+    Uses periodic wrap-around (``jnp.roll``); the inlet, outlet and wall
+    treatments overwrite the wrapped values where needed.
 
     Args:
         f: Distribution function, shape (nx, ny, 9).
-        shifts: List of (dx, dy) integer shifts for each direction.
 
     Returns:
         Streamed distribution, shape (nx, ny, 9).
     """
-    f_new = jnp.zeros_like(f)
-    for i, (sx, sy) in enumerate(shifts):
-        f_new = f_new.at[..., i].set(
-            jnp.roll(jnp.roll(f[..., i], sx, axis=0), sy, axis=1)
-        )
-    return f_new
+    shifts = [(int(sx), int(sy)) for sx, sy in np.asarray(D2Q9.c)]
+    return jnp.stack(
+        [jnp.roll(f[..., i], shift, axis=(0, 1)) for i, shift in enumerate(shifts)],
+        axis=-1,
+    )
