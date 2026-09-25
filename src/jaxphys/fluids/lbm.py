@@ -230,17 +230,7 @@ class LBMGrid:
         wall = jnp.zeros((nx, ny), dtype=bool)
         if self._config.boundary != "periodic":
             wall = wall.at[:, 0].set(True).at[:, -1].set(True)
-        # Per-node reflection applied to solids after streaming.
-        if self._config.boundary == "free_slip":
-            reflect = jnp.where(
-                obstacle[..., None],
-                jnp.array(lattice.opposite),
-                jnp.where(wall[..., None], jnp.array(lattice.mirror_y), jnp.arange(9)),
-            )
-        else:
-            reflect = jnp.where(
-                (obstacle | wall)[..., None], jnp.array(lattice.opposite), jnp.arange(9)
-            )
+        free_slip = self._config.boundary == "free_slip"
         solid = obstacle | wall
 
         f0 = _compute_equilibrium(rho, ux, uy, cx, cy, lattice.w)
@@ -248,10 +238,11 @@ class LBMGrid:
 
         rho_h, ux_h, uy_h, vort_h = _lbm_rollout(
             f0,
-            solid,
-            reflect,
+            obstacle,
+            wall,
             1.0 / self._tau,
             u_inlet,
+            free_slip=free_slip,
             n_steps=n_steps,
             save_every=save_every,
         )
@@ -266,61 +257,83 @@ class LBMGrid:
         )
 
 
-@partial(jax.jit, static_argnames=("n_steps", "save_every"))
+# Lattice tables as static Python data (no device reads while tracing).
+_C = ((0, 0), (1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1))
+
+
+@partial(jax.jit, static_argnames=("free_slip", "n_steps", "save_every"))
 def _lbm_rollout(
     f0: Array,
-    solid: Array,
-    reflect: Array,
+    obstacle: Array,
+    wall: Array,
     omega: float,
     u_inlet: float,
     *,
+    free_slip: bool,
     n_steps: int,
     save_every: int,
 ) -> tuple[Array, Array, Array, Array]:
-    """BGK rollout; returns (rho, ux, uy, vorticity) snapshots."""
-    c = D2Q9.c
-    cx, cy = c[:, 0], c[:, 1]
+    """BGK rollout; returns (rho, ux, uy, vorticity) snapshots.
+
+    ``f0`` has the public ``(nx, ny, 9)`` layout. Inside the loop the
+    distribution is population-major, ``(9, nx, ny)``: each population is a
+    contiguous plane, so streaming is nine plane rolls and the moments are
+    explicit plane sums instead of length-9 minor-axis reductions and
+    strided rolls, which dominated the step time on CPU.
+    """
+    w = D2Q9.w[:, None, None]
+    cx = jnp.array([c[0] for c in _C])[:, None, None]
+    cy = jnp.array([c[1] for c in _C])[:, None, None]
+    opposite = np.asarray(D2Q9.opposite)
+    mirror = np.asarray(D2Q9.mirror_y)
+    solid = obstacle | wall
+    # Solid nodes that bounce populations back (all of them unless the y
+    # walls are free-slip, which reflect specularly instead).
+    bounce = obstacle if free_slip else solid
     fluid_inlet = ~solid[0, :]
 
-    def macroscopic(f: Array) -> tuple[Array, Array, Array]:
-        rho = jnp.sum(f, axis=-1)
-        return rho, (f @ cx) / rho, (f @ cy) / rho
+    def macroscopic(g: Array) -> tuple[Array, Array, Array]:
+        rho = g[0] + g[1] + g[2] + g[3] + g[4] + g[5] + g[6] + g[7] + g[8]
+        ux = (g[1] - g[3] + g[5] - g[6] - g[7] + g[8]) / rho
+        uy = (g[2] - g[4] + g[5] + g[6] - g[7] - g[8]) / rho
+        return rho, ux, uy
 
-    def step(f: Array) -> Array:
-        rho, ux, uy = macroscopic(f)
-        f_eq = _compute_equilibrium(rho, ux, uy, cx, cy, D2Q9.w)
-        f_post = f - omega * (f - f_eq)
+    def step(g: Array) -> Array:
+        rho, ux, uy = macroscopic(g)
+        u_sq = ux**2 + uy**2
+        cu = cx * ux + cy * uy
+        g_eq = w * rho * (1.0 + 3.0 * cu + 4.5 * cu**2 - 1.5 * u_sq)
+        g_post = g - omega * (g - g_eq)
         # Full-way bounce-back / specular reflection: the populations that
         # streamed into a solid node are sent back unchanged (no collision).
-        f_post = jnp.where(
-            solid[..., None], jnp.take_along_axis(f, reflect, axis=-1), f_post
+        g_post = jnp.where(bounce, g[opposite], g_post)
+        if free_slip:
+            g_post = jnp.where(wall & ~obstacle, g[mirror], g_post)
+        g = jnp.stack(
+            [jnp.roll(g_post[i], shift, axis=(0, 1)) for i, shift in enumerate(_C)]
         )
-        f = _stream(f_post)
 
         # Zou-He velocity inlet on the fluid nodes of the left edge.
         # Directions: 0=rest, 1=E, 2=N, 3=W, 4=S, 5=NE, 6=NW, 7=SW, 8=SE
-        col = f[0]
-        rho_in = (
-            col[:, 0]
-            + col[:, 2]
-            + col[:, 4]
-            + 2.0 * (col[:, 3] + col[:, 6] + col[:, 7])
-        ) / (1.0 - u_inlet)
-        shear = 0.5 * (col[:, 2] - col[:, 4])
-        inlet = (
-            col.at[:, 1]
-            .set(col[:, 3] + (2.0 / 3.0) * rho_in * u_inlet)
-            .at[:, 5]
-            .set(col[:, 7] - shear + (1.0 / 6.0) * rho_in * u_inlet)
-            .at[:, 8]
-            .set(col[:, 6] + shear + (1.0 / 6.0) * rho_in * u_inlet)
+        col = g[:, 0, :]
+        rho_in = (col[0] + col[2] + col[4] + 2.0 * (col[3] + col[6] + col[7])) / (
+            1.0 - u_inlet
         )
-        f = f.at[0].set(jnp.where(fluid_inlet[:, None], inlet, col))
+        shear = 0.5 * (col[2] - col[4])
+        inlet = (
+            col.at[1]
+            .set(col[3] + (2.0 / 3.0) * rho_in * u_inlet)
+            .at[5]
+            .set(col[7] - shear + (1.0 / 6.0) * rho_in * u_inlet)
+            .at[8]
+            .set(col[6] + shear + (1.0 / 6.0) * rho_in * u_inlet)
+        )
+        g = g.at[:, 0, :].set(jnp.where(fluid_inlet, inlet, col))
         # Zero-gradient outlet on the right edge.
-        return f.at[-1].set(f[-2])
+        return g.at[:, -1, :].set(g[:, -2, :])
 
-    def observe(f: Array) -> tuple[Array, Array, Array, Array]:
-        rho, ux, uy = macroscopic(f)
+    def observe(g: Array) -> tuple[Array, Array, Array, Array]:
+        rho, ux, uy = macroscopic(g)
         ux = jnp.where(solid, 0.0, ux)
         uy = jnp.where(solid, 0.0, uy)
         duy_dx: Array = jnp.gradient(uy, axis=0)  # type: ignore[assignment]
@@ -329,7 +342,7 @@ def _lbm_rollout(
         return rho, ux, uy, vort
 
     out: tuple[Array, Array, Array, Array] = strided_rollout(
-        step, f0, n_steps, save_every, observe
+        step, jnp.moveaxis(f0, -1, 0), n_steps, save_every, observe
     )
     return out
 

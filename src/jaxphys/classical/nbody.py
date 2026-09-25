@@ -156,15 +156,26 @@ def gravitational_accelerations(
 
     a_i = G * sum_{j != i} m_j (r_j - r_i) / (|r_j - r_i|^2 + eps^2)^{3/2}
     """
-    # dr[i, j] = r_j - r_i, shape (n, n, 3)
-    dr = positions[jnp.newaxis, :, :] - positions[:, jnp.newaxis, :]
+    # Displacements r_j - r_i as one (n, n) plane per Cartesian component:
+    # an (n, n, 3) array with a length-3 minor axis vectorizes poorly.
+    x, y, z = positions[:, 0], positions[:, 1], positions[:, 2]
+    dx = x[jnp.newaxis, :] - x[:, jnp.newaxis]
+    dy = y[jnp.newaxis, :] - y[:, jnp.newaxis]
+    dz = z[jnp.newaxis, :] - z[:, jnp.newaxis]
     # Pair weights m_j / d_ij^3 with the self-interaction removed. The
-    # diagonal distance is replaced before the power so gradients stay
-    # finite even without softening.
+    # diagonal distance is replaced before the rsqrt so gradients stay
+    # finite even without softening; rsqrt(d^2)^3 is much cheaper than
+    # pow(d^2, -1.5).
     self_pair = jnp.eye(positions.shape[0], dtype=bool)
-    dist_sq = jnp.where(self_pair, 1.0, jnp.sum(dr**2, axis=-1) + softening**2)
-    w = jnp.where(self_pair, 0.0, masses[jnp.newaxis, :] * dist_sq**-1.5)
-    return G * jnp.einsum("ij,ijk->ik", w, dr)
+    dist_sq = jnp.where(self_pair, 1.0, dx**2 + dy**2 + dz**2 + softening**2)
+    inv_dist = jax.lax.rsqrt(dist_sq)
+    w = jnp.where(
+        self_pair, 0.0, masses[jnp.newaxis, :] * (inv_dist * inv_dist * inv_dist)
+    )
+    return G * jnp.stack(
+        [jnp.sum(w * dx, axis=1), jnp.sum(w * dy, axis=1), jnp.sum(w * dz, axis=1)],
+        axis=-1,
+    )
 
 
 def total_energy(
