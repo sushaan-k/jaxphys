@@ -329,6 +329,56 @@ wheels = [
 ]
 
 [[package]]
+name = "jaxphys"
+version = "0.2.0"
+source = { editable = "." }
+dependencies = [
+    { name = "jax" },
+    { name = "jaxlib" },
+    { name = "numpy" },
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "matplotlib" },
+    { name = "mypy" },
+    { name = "plotly" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "scipy" },
+]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "scipy" },
+]
+viz = [
+    { name = "matplotlib" },
+    { name = "plotly" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jax", specifier = ">=0.4.30" },
+    { name = "jaxlib", specifier = ">=0.4.30" },
+    { name = "jaxphys", extras = ["viz", "dev"], marker = "extra == 'all'" },
+    { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.7" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.7" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "plotly", marker = "extra == 'viz'", specifier = ">=5.15" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+    { name = "scipy", marker = "extra == 'dev'", specifier = ">=1.10" },
+]
+provides-extras = ["viz", "dev", "all"]
+
+[[package]]
 name = "kiwisolver"
 version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -668,53 +718,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/59/96/45218c2fdec4c9f22
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3f/c3/06490e98393dcb4d6ce2bf331a39335375c300afaef526897881fbeae6ab/narwhals-2.18.1-py3-none-any.whl", hash = "sha256:a0a8bb80205323851338888ba3a12b4f65d352362c8a94be591244faf36504ad", size = 444952, upload-time = "2026-03-24T15:11:23.801Z" },
 ]
-
-[[package]]
-name = "neurosim"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "jax" },
-    { name = "jaxlib" },
-    { name = "numpy" },
-    { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-all = [
-    { name = "matplotlib" },
-    { name = "mypy" },
-    { name = "plotly" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-viz = [
-    { name = "matplotlib" },
-    { name = "plotly" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "jax", specifier = ">=0.4.20" },
-    { name = "jaxlib", specifier = ">=0.4.20" },
-    { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.7" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.7" },
-    { name = "neurosim", extras = ["viz", "dev"], marker = "extra == 'all'" },
-    { name = "numpy", specifier = ">=1.24" },
-    { name = "plotly", marker = "extra == 'viz'", specifier = ">=5.15" },
-    { name = "pydantic", specifier = ">=2.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-]
-provides-extras = ["viz", "dev", "all"]
 
 [[package]]
 name = "numpy"

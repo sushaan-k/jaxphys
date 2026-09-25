@@ -24,7 +24,7 @@ keywords = [
     "statistical-mechanics",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Education",
     "License :: OSI Approved :: MIT License",
@@ -37,8 +37,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "jax>=0.4.20",
-    "jaxlib>=0.4.20",
+    "jax>=0.4.30",
+    "jaxlib>=0.4.30",
     "pydantic>=2.0",
     "numpy>=1.24",
 ]
@@ -49,6 +49,7 @@ viz = [
     "plotly>=5.15",
 ]
 dev = [
+    "scipy>=1.10",
     "pytest>=7.4",
     "pytest-cov>=4.1",
     "ruff>=0.1.0",
