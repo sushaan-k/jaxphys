@@ -20,14 +20,13 @@ References:
 from __future__ import annotations
 
 import logging
-from functools import partial
 from typing import Any, cast
 
 import jax
 import jax.numpy as jnp
 from jax import Array
 
-from jaxphys._rollout import is_array_tree, strided_rollout
+from jaxphys._rollout import call_with_params, strided_rollout
 from jaxphys.exceptions import ConfigurationError
 from jaxphys.state import Trajectory
 
@@ -68,7 +67,6 @@ class RigidBody:
                 "All principal moments of inertia must be positive"
             )
         self._torque_fn = torque_fn
-        self._rollout = jax.jit(self._rollout_impl, static_argnames=("n_steps",))
 
     @property
     def inertia(self) -> Array:
@@ -86,22 +84,7 @@ class RigidBody:
         Returns:
             Angular acceleration domega/dt, shape (3,).
         """
-        inertia = self._inertia
-        wx, wy, wz = omega[0], omega[1], omega[2]
-
-        domega = jnp.array(
-            [
-                (inertia[1] - inertia[2]) * wy * wz / inertia[0],
-                (inertia[2] - inertia[0]) * wz * wx / inertia[1],
-                (inertia[0] - inertia[1]) * wx * wy / inertia[2],
-            ]
-        )
-
-        if self._torque_fn is not None:
-            tau = self._torque_fn(omega, t, params)
-            domega = domega + jnp.asarray(tau) / inertia
-
-        return domega
+        return _euler_rhs(self._inertia, self._torque_fn, omega, t, params)
 
     def _quaternion_deriv(self, quat: Array, omega: Array) -> Array:
         """Time derivative of the orientation quaternion.
@@ -118,17 +101,7 @@ class RigidBody:
         Returns:
             dq/dt, shape (4,).
         """
-        w, x, y, z = quat
-        wx, wy, wz = omega
-
-        return 0.5 * jnp.array(
-            [
-                -x * wx - y * wy - z * wz,
-                w * wx + y * wz - z * wy,
-                w * wy + z * wx - x * wz,
-                w * wz + x * wy - y * wx,
-            ]
-        )
+        return _quaternion_deriv(quat, omega)
 
     def _normalize_quaternion(self, quat: Array) -> Array:
         """Normalize a quaternion to unit length."""
@@ -160,46 +133,7 @@ class RigidBody:
         self, carry: tuple[Array, Array, Array], dt: Array, params: Any
     ) -> tuple[Array, Array, Array]:
         """One RK4 step of the coupled (quaternion, omega) system."""
-        quat_c, omega_c, t_c = carry
-
-        k1_o = self._euler_equations(omega_c, t_c, params)
-        k2_o = self._euler_equations(omega_c + 0.5 * dt * k1_o, t_c + 0.5 * dt, params)
-        k3_o = self._euler_equations(omega_c + 0.5 * dt * k2_o, t_c + 0.5 * dt, params)
-        k4_o = self._euler_equations(omega_c + dt * k3_o, t_c + dt, params)
-        omega_new = omega_c + (dt / 6.0) * (k1_o + 2 * k2_o + 2 * k3_o + k4_o)
-
-        k1_q = self._quaternion_deriv(quat_c, omega_c)
-        k2_q = self._quaternion_deriv(
-            quat_c + 0.5 * dt * k1_q, omega_c + 0.5 * dt * k1_o
-        )
-        k3_q = self._quaternion_deriv(
-            quat_c + 0.5 * dt * k2_q, omega_c + 0.5 * dt * k2_o
-        )
-        k4_q = self._quaternion_deriv(quat_c + dt * k3_q, omega_c + dt * k3_o)
-        quat_new = quat_c + (dt / 6.0) * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
-        return self._normalize_quaternion(quat_new), omega_new, t_c + dt
-
-    def _rollout_impl(
-        self,
-        quat: Array,
-        omega: Array,
-        t0: Array,
-        dt: Array,
-        params: Any,
-        n_steps: int,
-    ) -> tuple[Array, Array, Array, Array]:
-        def observe(carry: tuple[Array, Array, Array]) -> tuple[Array, ...]:
-            quat_c, omega_c, t_c = carry
-            return quat_c, omega_c, t_c, self.rotational_energy(omega_c)
-
-        out: tuple[Array, Array, Array, Array] = strided_rollout(
-            lambda carry: self._rk4_step(carry, dt, params),
-            (quat, omega, t0),
-            n_steps,
-            1,
-            observe,
-        )
-        return out
+        return _rk4_step(self._inertia, self._torque_fn, carry, dt, params)
 
     def simulate(
         self,
@@ -246,14 +180,19 @@ class RigidBody:
             n_steps,
         )
 
-        t0 = jnp.asarray(t_start, dtype=jnp.float64)
-        dt_arr = jnp.asarray(dt, dtype=jnp.float64)
-        if is_array_tree(params):
-            out = self._rollout(quat, omega, t0, dt_arr, params, n_steps=n_steps)
-        else:  # untraceable params: close over them (recompiles per call)
-            out = jax.jit(partial(self._rollout_impl, params=params, n_steps=n_steps))(
-                quat, omega, t0, dt_arr
-            )
+        out = call_with_params(
+            _rollout,
+            _rollout_impl,
+            params,
+            _STATIC,
+            inertia=self._inertia,
+            quat=quat,
+            omega=omega,
+            t0=jnp.asarray(t_start, dtype=jnp.float64),
+            dt=jnp.asarray(dt, dtype=jnp.float64),
+            torque_fn=self._torque_fn,
+            n_steps=n_steps,
+        )
         q_hist, o_hist, t_hist, e_hist = out
 
         return Trajectory(
@@ -262,3 +201,98 @@ class RigidBody:
             p=o_hist,
             energy=e_hist,
         )
+
+
+def _euler_rhs(
+    inertia: Array, torque_fn: Any | None, omega: Array, t: Array | float, params: Any
+) -> Array:
+    """Euler's equations ``I domega/dt = (I omega) x omega + tau`` (body frame)."""
+    wx, wy, wz = omega[0], omega[1], omega[2]
+
+    domega = jnp.array(
+        [
+            (inertia[1] - inertia[2]) * wy * wz / inertia[0],
+            (inertia[2] - inertia[0]) * wz * wx / inertia[1],
+            (inertia[0] - inertia[1]) * wx * wy / inertia[2],
+        ]
+    )
+
+    if torque_fn is not None:
+        tau = torque_fn(omega, t, params)
+        domega = domega + jnp.asarray(tau) / inertia
+
+    return domega
+
+
+def _quaternion_deriv(quat: Array, omega: Array) -> Array:
+    """``dq/dt = 0.5 * q * (0, omega)`` for a unit quaternion ``(w, x, y, z)``."""
+    w, x, y, z = quat
+    wx, wy, wz = omega
+
+    return 0.5 * jnp.array(
+        [
+            -x * wx - y * wy - z * wz,
+            w * wx + y * wz - z * wy,
+            w * wy + z * wx - x * wz,
+            w * wz + x * wy - y * wx,
+        ]
+    )
+
+
+def _rk4_step(
+    inertia: Array,
+    torque_fn: Any | None,
+    carry: tuple[Array, Array, Array],
+    dt: Array,
+    params: Any,
+) -> tuple[Array, Array, Array]:
+    """One RK4 step of the coupled (quaternion, omega) system."""
+    quat_c, omega_c, t_c = carry
+
+    def f(omega: Array, t: Array) -> Array:
+        return _euler_rhs(inertia, torque_fn, omega, t, params)
+
+    k1_o = f(omega_c, t_c)
+    k2_o = f(omega_c + 0.5 * dt * k1_o, t_c + 0.5 * dt)
+    k3_o = f(omega_c + 0.5 * dt * k2_o, t_c + 0.5 * dt)
+    k4_o = f(omega_c + dt * k3_o, t_c + dt)
+    omega_new = omega_c + (dt / 6.0) * (k1_o + 2 * k2_o + 2 * k3_o + k4_o)
+
+    k1_q = _quaternion_deriv(quat_c, omega_c)
+    k2_q = _quaternion_deriv(quat_c + 0.5 * dt * k1_q, omega_c + 0.5 * dt * k1_o)
+    k3_q = _quaternion_deriv(quat_c + 0.5 * dt * k2_q, omega_c + 0.5 * dt * k2_o)
+    k4_q = _quaternion_deriv(quat_c + dt * k3_q, omega_c + dt * k3_o)
+    quat_new = quat_c + (dt / 6.0) * (k1_q + 2 * k2_q + 2 * k3_q + k4_q)
+    return cast(Array, quat_new / jnp.linalg.norm(quat_new)), omega_new, t_c + dt
+
+
+def _rollout_impl(
+    inertia: Array,
+    quat: Array,
+    omega: Array,
+    t0: Array,
+    dt: Array,
+    params: Any,
+    torque_fn: Any | None,
+    n_steps: int,
+) -> tuple[Array, Array, Array, Array]:
+    """RK4 rollout saving every step; returns (quat, omega, t, energy)."""
+
+    def observe(carry: tuple[Array, Array, Array]) -> tuple[Array, ...]:
+        _, omega_c, _ = carry
+        return (*carry, 0.5 * jnp.sum(inertia * omega_c**2))
+
+    out: tuple[Array, Array, Array, Array] = strided_rollout(
+        lambda carry: _rk4_step(inertia, torque_fn, carry, dt, params),
+        (quat, omega, t0),
+        n_steps,
+        1,
+        observe,
+    )
+    return out
+
+
+# Compiled once per (torque_fn, n_steps); the inertia, initial state, dt
+# and array-valued params are traced, so new values do not recompile.
+_STATIC = ("torque_fn", "n_steps")
+_rollout = jax.jit(_rollout_impl, static_argnames=_STATIC)

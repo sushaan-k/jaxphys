@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from functools import partial
-from typing import Literal
+from typing import Any, Literal
 
 import jax
 import jax.numpy as jnp
@@ -165,7 +165,8 @@ class SPHFluid:
     def cell_capacity(self, positions: Array) -> int | None:
         """Slots per cell for the neighbour search, or ``None`` for all pairs.
 
-        Uses twice the current maximum cell occupancy (at least 8). Returns
+        Uses twice the current maximum cell occupancy, rounded up to a
+        multiple of 8. Returns
         ``None`` when the box holds fewer than 3 cells along an axis, where a
         cell list cannot beat the all-pairs search.
         """
@@ -174,7 +175,9 @@ class SPHFluid:
             return None
         cells = _cell_ids(jnp.asarray(positions), self.box, (nx, ny))
         occupancy = int(jnp.max(jnp.bincount(cells, length=nx * ny)))
-        return max(8, 2 * occupancy)
+        # Round up to a multiple of 8 so that small changes in occupancy
+        # (new initial conditions) reuse the compiled loop.
+        return 8 * max(1, -(-2 * occupancy // 8))
 
     def _neighbours(
         self, positions: Array, capacity: int | None
@@ -358,7 +361,43 @@ class SPHFluid:
         )
 
 
-@partial(jax.jit, static_argnames=("fluid", "capacity", "n_steps", "save_every"))
+def _flatten_fluid(
+    fluid: SPHFluid,
+) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+    # The smoothing length, box and boundary fix the cell-list grid (array
+    # shapes), so they are static; the other constants are traced leaves.
+    children = (
+        fluid.mass,
+        fluid.rest_density,
+        fluid.sound_speed,
+        fluid.gamma,
+        fluid.alpha,
+        fluid.gravity,
+    )
+    return children, (fluid.h, fluid.box, fluid.boundary)
+
+
+def _unflatten_fluid(aux: tuple[Any, ...], children: tuple[Any, ...]) -> SPHFluid:
+    fluid = object.__new__(SPHFluid)
+    fluid.h, fluid.box, fluid.boundary = aux
+    (
+        fluid.mass,
+        fluid.rest_density,
+        fluid.sound_speed,
+        fluid.gamma,
+        fluid.alpha,
+        fluid.gravity,
+    ) = children
+    return fluid
+
+
+# A pytree, so the compiled rollout takes the fluid constants as traced
+# arguments: fluids that differ only in mass, sound speed, viscosity, ...
+# share one executable.
+jax.tree_util.register_pytree_node(SPHFluid, _flatten_fluid, _unflatten_fluid)
+
+
+@partial(jax.jit, static_argnames=("capacity", "n_steps", "save_every"))
 def _sph_rollout(
     fluid: SPHFluid,
     positions: Array,

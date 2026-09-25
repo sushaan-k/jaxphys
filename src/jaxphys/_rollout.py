@@ -12,7 +12,9 @@ store one carry per snapshot and recompute the inner steps.
 from __future__ import annotations
 
 import numbers
+from collections import OrderedDict
 from collections.abc import Callable
+from functools import partial
 from typing import Any, TypeVar
 
 import jax
@@ -65,3 +67,73 @@ def is_array_tree(tree: Any) -> bool:
         isinstance(leaf, numbers.Number | np.ndarray | np.generic | jax.Array)
         for leaf in jax.tree_util.tree_leaves(tree)
     )
+
+
+def _concrete_key(tree: Any) -> Any:
+    """Hashable key of a pytree's structure and concrete leaf values, or None."""
+    leaves, treedef = jax.tree_util.tree_flatten(tree)
+    key: list[Any] = [treedef]
+    for leaf in leaves:
+        if is_traced(leaf):
+            return None
+        if isinstance(leaf, np.ndarray | np.generic | jax.Array):
+            arr = np.asarray(leaf)
+            key.append((arr.dtype.str, arr.shape, arr.tobytes()))
+        else:
+            try:
+                hash(leaf)
+            except TypeError:
+                return None
+            key.append((type(leaf), leaf))
+    return tuple(key)
+
+
+_CONSTANT_PARAM_CACHE: OrderedDict[Any, Callable[..., Any]] = OrderedDict()
+_CONSTANT_PARAM_CACHE_SIZE = 64
+
+
+def call_with_params(
+    jitted: Callable[..., Any],
+    impl: Callable[..., Any],
+    params: Any,
+    static_argnames: tuple[str, ...],
+    **kwargs: Any,
+) -> Any:
+    """Run a compiled rollout with ``params`` as a traced argument if possible.
+
+    ``jitted`` must be ``jax.jit(impl, static_argnames=static_argnames)``,
+    created once at module level, so new parameter *values* reuse the
+    compiled loop. Two cases cannot be traced and fall back to compiling
+    ``impl`` with ``params`` closed over as constants:
+
+    * leaves that are not numbers or arrays (arbitrary Python objects);
+    * user physics that needs concrete values (``if params.k > 0:``), which
+      raises a ``JAXTypeError`` when traced.
+
+    Fallback executables are cached on the concrete parameter values, so
+    repeating a call with equal parameters does not compile again.
+    """
+    if is_array_tree(params):
+        try:
+            return jitted(params=params, **kwargs)
+        except jax.errors.JAXTypeError:
+            pass
+    static = {k: kwargs.pop(k) for k in static_argnames if k in kwargs}
+    params_key = _concrete_key(params)
+    key = None
+    if params_key is not None:
+        try:
+            key = (impl, tuple(sorted(static.items())), params_key)
+            hash(key)
+        except TypeError:
+            key = None
+    run = _CONSTANT_PARAM_CACHE.get(key) if key is not None else None
+    if run is None:
+        run = jax.jit(partial(impl, params=params, **static))
+        if key is not None:
+            _CONSTANT_PARAM_CACHE[key] = run
+            if len(_CONSTANT_PARAM_CACHE) > _CONSTANT_PARAM_CACHE_SIZE:
+                _CONSTANT_PARAM_CACHE.popitem(last=False)
+    else:
+        _CONSTANT_PARAM_CACHE.move_to_end(key)
+    return run(**kwargs)

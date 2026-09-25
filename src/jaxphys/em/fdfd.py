@@ -89,8 +89,12 @@ def solve_fdfd(
     Raises:
         ConfigurationError: If shapes or parameters are invalid.
     """
+    # Explicit dtypes drop weak typing (e.g. from jnp.full(shape, 2.0)), so
+    # equal-shaped inputs always reuse the same compiled operations.
     eps_r = jnp.asarray(eps_r)
+    eps_r = jnp.asarray(eps_r, dtype=eps_r.dtype)
     source = jnp.asarray(source)
+    source = jnp.asarray(source, dtype=source.dtype)
     if eps_r.ndim != 2 or source.shape != eps_r.shape:
         raise ConfigurationError(
             f"eps_r and source must be 2D with equal shapes, got "

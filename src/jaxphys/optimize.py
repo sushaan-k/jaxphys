@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, NamedTuple, cast
 
 import jax
@@ -456,6 +457,13 @@ def _score_sweep_values(
     return scores
 
 
+@partial(jax.jit, static_argnums=0)
+def _jit_grad(objective: Callable[[Array], Array], x: Array) -> Array:
+    """Gradient of ``objective`` at ``x``, compiled once per objective."""
+    grad: Array = jax.grad(objective)(x)
+    return grad
+
+
 def optimize(
     objective: Any,
     initial_guess: Array | float,
@@ -491,8 +499,14 @@ def optimize(
         OptimizeResult with optimal parameters.
     """
     x = jnp.asarray(initial_guess, dtype=jnp.float64)
-    # Compile the gradient once; every iteration then reuses the executable.
-    grad_fn = jax.jit(jax.grad(objective))
+    # Compile the gradient once; every iteration then reuses the executable,
+    # and so do later optimize() calls with the same objective function.
+    grad_fn: Callable[[Array], Array]
+    try:
+        hash(objective)
+        grad_fn = partial(_jit_grad, objective)
+    except TypeError:
+        grad_fn = jax.jit(jax.grad(objective))
 
     logger.info(
         "Starting optimization: method=%s, lr=%.2e, max_iter=%d",

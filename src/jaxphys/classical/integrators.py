@@ -14,14 +14,13 @@ References:
 """
 
 from collections.abc import Callable
-from functools import partial
 from typing import Any
 
 import jax
 import jax.numpy as jnp
 from jax import Array
 
-from jaxphys._rollout import is_array_tree, strided_rollout
+from jaxphys._rollout import call_with_params, strided_rollout
 from jaxphys.exceptions import ConfigurationError
 
 # Type alias for a derivative function: (q, p, t, params) -> (dq/dt, dp/dt)
@@ -559,6 +558,8 @@ def integrate_system(
     The loop is compiled once per (integrator, system, n_steps, save_every)
     and reused across calls: ``q0``, ``p0``, ``dt`` and array-valued
     ``params`` are traced arguments, so changing them does not recompile.
+    Params that must be concrete (user code branching on their values) are
+    compiled in as constants, cached per value.
     Rows are the states at steps ``0, save_every, 2*save_every, ...``.
     """
     step = get_integrator(integrator)
@@ -575,14 +576,13 @@ def integrate_system(
     if save_every < 1:
         raise ConfigurationError(f"save_every must be >= 1, got {save_every}")
     n_steps = int((t_end - t_start) / dt)
-    run: Callable[..., tuple[Array, Array, Array, Array]]
-    if is_array_tree(params):
-        run = partial(_rollout, params=params)
-    else:
-        # Arbitrary Python objects cannot be traced: close over them instead
-        # (this path recompiles on every call).
-        run = jax.jit(partial(_rollout_impl, params=params), static_argnames=_STATIC)
-    out: tuple[Array, Array, Array, Array] = run(
+    # Array-valued params are traced (new values reuse the compiled loop);
+    # params that cannot be traced are closed over as constants instead.
+    out: tuple[Array, Array, Array, Array] = call_with_params(
+        _rollout,
+        _rollout_impl,
+        params,
+        _STATIC,
         step=step,
         deriv_fn=deriv_fn,
         energy_fn=energy_fn,

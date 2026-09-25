@@ -87,10 +87,7 @@ class IsingLattice:
         Returns:
             Spin array of +1/-1, shape (Lx, Ly).
         """
-        return (
-            2 * jax.random.bernoulli(key, shape=(self._Lx, self._Ly)).astype(jnp.int32)
-            - 1
-        )
+        return _random_spins(key, (self._Lx, self._Ly))
 
     def run_metropolis(
         self,
@@ -135,6 +132,11 @@ class IsingLattice:
         )
         stats = _thermo_stats(energies, mags, temperature, self.n_spins)
         return {name: float(value) for name, value in stats.items()}
+
+
+def _random_spins(key: Array, shape: tuple[int, int]) -> Array:
+    """Uniformly random +1/-1 spins (int32)."""
+    return 2 * jax.random.bernoulli(key, shape=shape).astype(jnp.int32) - 1
 
 
 def _energy(spins: Array, J: float | Array, h: float | Array) -> Array:
@@ -265,6 +267,40 @@ def _wolff_chain(
     return energies, mags
 
 
+@partial(jax.jit, static_argnames=("shape", "algorithm", "n_warmup", "n_sweeps"))
+def _sweep_chains(
+    keys: Array,
+    temperatures: Array,
+    J: float,
+    h: float,
+    *,
+    shape: tuple[int, int],
+    algorithm: str,
+    n_warmup: int,
+    n_sweeps: int,
+) -> tuple[Array, Array]:
+    """One independent chain per temperature, vmapped and compiled once.
+
+    Compiled once per (lattice shape, algorithm, n_warmup, n_sweeps, number
+    of temperatures); temperatures, couplings and keys are traced.
+    """
+
+    def one_temperature(k: Array, T: Array) -> tuple[Array, Array]:
+        k, init_key = jax.random.split(k)
+        spins = _random_spins(init_key, shape)
+        chain: tuple[Array, Array]
+        if algorithm == "metropolis":
+            chain = _metropolis_chain(
+                spins, k, 1.0 / T, J, h, n_warmup=n_warmup, n_sweeps=n_sweeps
+            )
+        else:
+            chain = _wolff_chain(spins, k, T, J, n_warmup=n_warmup, n_sweeps=n_sweeps)
+        return chain
+
+    out: tuple[Array, Array] = jax.vmap(one_temperature)(keys, temperatures)
+    return out
+
+
 def sweep_temperatures(
     lattice: IsingLattice,
     temperatures: Array,
@@ -315,22 +351,17 @@ def sweep_temperatures(
         lattice.size[1],
     )
 
-    J, h = lattice._config.J, lattice._config.h
-
-    def one_temperature(k: Array, T: Array) -> tuple[Array, Array]:
-        k, init_key = jax.random.split(k)
-        spins = lattice.random_state(init_key)
-        chain: tuple[Array, Array]
-        if algorithm == "metropolis":
-            chain = _metropolis_chain(
-                spins, k, 1.0 / T, J, h, n_warmup=n_warmup, n_sweeps=n_sweeps
-            )
-        else:
-            chain = _wolff_chain(spins, k, T, J, n_warmup=n_warmup, n_sweeps=n_sweeps)
-        return chain
-
     keys = jax.random.split(key, temperatures.shape[0])
-    energies, mags = jax.jit(jax.vmap(one_temperature))(keys, temperatures)
+    energies, mags = _sweep_chains(
+        keys,
+        temperatures,
+        lattice._config.J,
+        lattice._config.h,
+        shape=lattice.size,
+        algorithm=algorithm,
+        n_warmup=n_warmup,
+        n_sweeps=n_sweeps,
+    )
     stats = _thermo_stats(energies, mags, temperatures, lattice.n_spins)
     return IsingResult(
         temperatures=temperatures,
