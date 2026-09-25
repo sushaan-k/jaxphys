@@ -153,7 +153,10 @@ def _solve_block_tridiagonal(
     that the dense blocks have the size of the shorter one.
     """
     if center.shape[1] > center.shape[0]:
-        return _solve_block_tridiagonal(center.T, y_lo, y_hi, x_lo, x_hi, rhs.T).T
+        transposed: Array = _solve_block_tridiagonal(
+            center.T, y_lo, y_hi, x_lo, x_hi, rhs.T
+        )
+        return transposed.T
     n = center.shape[1]
     eye = jnp.eye(n, dtype=center.dtype)
 
