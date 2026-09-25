@@ -158,9 +158,7 @@ class TightBinding:
             raise ConfigurationError(
                 f"k_points must have {self.dim} components, got {k_points.shape[-1]}"
             )
-        energies: Array = jax.vmap(
-            lambda k: jnp.linalg.eigvalsh(self.bloch_hamiltonian(k))
-        )(k_points)
+        energies: Array = _bands(self, k_points)
         return energies
 
     def finite_hamiltonian(
@@ -211,6 +209,16 @@ jax.tree_util.register_dataclass(
     data_fields=["lattice_vectors", "onsite", "amplitudes"],
     meta_fields=["sources", "targets", "cells"],
 )
+
+
+@jax.jit
+def _bands(model: TightBinding, k_points: Array) -> Array:
+    """Compiled band structure; reused for any model with the same hoppings
+    structure and number of k-points (hopping amplitudes are traced)."""
+    energies: Array = jax.vmap(
+        lambda k: jnp.linalg.eigvalsh(model.bloch_hamiltonian(k))
+    )(k_points)
+    return energies
 
 
 def k_path(
