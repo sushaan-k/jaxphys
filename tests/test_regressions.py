@@ -354,6 +354,40 @@ def test_lbm_no_slip_channel_develops_poiseuille_profile() -> None:
     np.testing.assert_allclose(u_free[1:-1], 0.02, rtol=1e-6)
 
 
+def test_lbm_inflow_outflow_conserves_mass_and_matches_poiseuille() -> None:
+    # The zero-gradient (copy) outlet let the mean density grow without bound
+    # (1.00 -> 2.26 in 20000 steps for a 160x34 channel, eventually NaN). A
+    # pressure outlet must give a steady state: stationary mass, the inflow
+    # carried through every cross-section, a parabolic profile and the
+    # Poiseuille pressure gradient dp/dx = -12 mu u_mean / H^2.
+    nx, ny, nu, u_in = 120, 22, 0.1, 0.04
+    grid = jp.LBMGrid(size=(nx, ny), viscosity=nu, boundary="no_slip")
+    hist = grid.simulate(n_steps=12000, u_inlet=u_in, save_every=3000)
+    rho, ux = np.asarray(hist.rho), np.asarray(hist.ux)
+    assert np.all(np.isfinite(rho))
+
+    mass = rho[:, :, 1:-1].sum(axis=(1, 2))
+    assert abs(mass[-1] - mass[-2]) / mass[-1] < 1e-6
+    np.testing.assert_allclose(rho[-1, -1, 1:-1], 1.0, rtol=1e-12)  # outlet
+
+    inflow = np.sum(rho[-1, 0, 1:-1] * u_in)
+    for i in (nx // 4, nx // 2, nx - 1):
+        flux = np.sum(rho[-1, i, 1:-1] * ux[-1, i, 1:-1])
+        assert flux == pytest.approx(inflow, rel=1e-6)
+
+    width = ny - 2  # walls half-way between nodes 0/1 and -2/-1
+    y = np.arange(1, ny - 1)
+    profile = ux[-1, 3 * nx // 4, 1:-1]
+    parabola = 6 * profile.mean() * (y - 0.5) * (width + 0.5 - y) / width**2
+    assert np.max(np.abs(profile - parabola)) / profile.max() < 5e-3
+
+    xs = np.arange(nx // 2, nx - 10)
+    dp_dx = np.polyfit(xs, rho[-1, xs, 1:-1].mean(axis=1), 1)[0] / 3.0  # p = rho/3
+    mu = nu * rho[-1, nx // 2, 1:-1].mean()
+    expected = -12.0 * mu * ux[-1, nx // 2, 1:-1].mean() / width**2
+    assert dp_dx == pytest.approx(expected, rel=0.05)
+
+
 def test_navier_stokes_vorticity_uses_grid_spacing() -> None:
     dx = 0.05
     solver = jp.NavierStokesSolver(size=(24, 24), viscosity=0.01, dx=dx)

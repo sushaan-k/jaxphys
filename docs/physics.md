@@ -246,9 +246,14 @@ This dramatically reduces autocorrelation times near T_c.
 
 `LBMGrid` streams and collides nine populations per node with relaxation
 time tau = 3 nu + 1/2. The x direction is a channel with a Zou-He velocity
-inlet and a zero-gradient outlet; the y edges are periodic, no-slip
-(full-way bounce-back) or free-slip (specular reflection). A no-slip
-channel develops the parabolic Poiseuille profile.
+inlet (u = u_inlet) and a Zou-He pressure outlet (rho = 1); the y edges are
+periodic, no-slip (full-way bounce-back) or free-slip (specular
+reflection). Pinning the outlet density closes the mass balance: a no-slip
+channel reaches a steady plane-Poiseuille state whose profile is parabolic
+(walls half-way between the wall rows and the first fluid rows) and whose
+pressure gradient is dp/dx = -12 mu u_mean / H^2, with p = rho / 3.
+Pressure-driven flow makes the density inside the channel slightly above
+1 (a few percent for long, viscous channels).
 
 ### Vorticity-streamfunction Navier-Stokes
 

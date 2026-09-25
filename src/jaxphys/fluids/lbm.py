@@ -94,7 +94,9 @@ class LBMGrid:
     """2D Lattice Boltzmann simulation grid.
 
     Implements the D2Q9 BGK scheme for channel flow in x: a Zou-He
-    velocity inlet at ``x = 0`` and a zero-gradient outlet at ``x = nx - 1``.
+    velocity inlet (``u = (u_inlet, 0)``) at ``x = 0`` and a Zou-He pressure
+    outlet (``rho = 1``) at ``x = nx - 1``, so the mass flowing in leaves
+    through the outlet and a channel reaches a steady state.
     Solid obstacles use full-way bounce-back. ``boundary`` selects the
     y edges: ``"periodic"``, ``"no_slip"`` (bounce-back walls on the first
     and last rows) or ``"free_slip"`` (specular-reflection walls).
@@ -234,7 +236,11 @@ class LBMGrid:
         solid = obstacle | wall
 
         f0 = _compute_equilibrium(rho, ux, uy, cx, cy, lattice.w)
-        f0 = jnp.where(solid[..., None], lattice.w, f0)
+        # Bounce-back nodes start at rest. Free-slip walls keep the local
+        # equilibrium: their first specular reflection then carries the
+        # tangential flow instead of injecting rest populations.
+        at_rest = obstacle if free_slip else solid
+        f0 = jnp.where(at_rest[..., None], lattice.w, f0)
 
         rho_h, ux_h, uy_h, vort_h = _lbm_rollout(
             f0,
@@ -291,6 +297,7 @@ def _lbm_rollout(
     # walls are free-slip, which reflect specularly instead).
     bounce = obstacle if free_slip else solid
     fluid_inlet = ~solid[0, :]
+    fluid_outlet = ~solid[-1, :]
 
     def macroscopic(g: Array) -> tuple[Array, Array, Array]:
         rho = g[0] + g[1] + g[2] + g[3] + g[4] + g[5] + g[6] + g[7] + g[8]
@@ -329,8 +336,23 @@ def _lbm_rollout(
             .set(col[6] + shear + (1.0 / 6.0) * rho_in * u_inlet)
         )
         g = g.at[:, 0, :].set(jnp.where(fluid_inlet, inlet, col))
-        # Zero-gradient outlet on the right edge.
-        return g.at[:, -1, :].set(g[:, -2, :])
+
+        # Zou-He pressure outlet (rho = 1, u_y = 0) on the fluid nodes of the
+        # right edge: the unknown west-moving populations 3, 6, 7 follow from
+        # the known ones. Pinning the outlet density fixes the mass balance;
+        # a zero-gradient copy outlet lets the mass grow without bound.
+        col = g[:, -1, :]
+        ux_out = -1.0 + (col[0] + col[2] + col[4] + 2.0 * (col[1] + col[5] + col[8]))
+        shear = 0.5 * (col[2] - col[4])
+        outlet = (
+            col.at[3]
+            .set(col[1] - (2.0 / 3.0) * ux_out)
+            .at[7]
+            .set(col[5] + shear - (1.0 / 6.0) * ux_out)
+            .at[6]
+            .set(col[8] - shear - (1.0 / 6.0) * ux_out)
+        )
+        return g.at[:, -1, :].set(jnp.where(fluid_outlet, outlet, col))
 
     def observe(g: Array) -> tuple[Array, Array, Array, Array]:
         rho, ux, uy = macroscopic(g)
