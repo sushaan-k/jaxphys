@@ -10,14 +10,14 @@ The far-field radiation pattern of a z-oriented dipole has:
 
 import jax.numpy as jnp
 
-import neurosim as ns
+import jaxphys as jp
 
 # Grid parameters
 n = 40  # grid cells per dimension
 resolution = 0.01  # 1 cm cells
 
 # Create 3D grid
-grid = ns.EMGrid3D(
+grid = jp.EMGrid3D(
     size=(n, n, n),
     resolution=resolution,
     boundary="absorbing",
@@ -27,7 +27,7 @@ grid = ns.EMGrid3D(
 # Add a z-polarized point source at the center
 center = n // 2
 grid.add_source(
-    ns.PointSource3D(
+    jp.PointSource3D(
         frequency=3e9,  # 3 GHz (lambda ~ 10 cm)
         position=(center, center, center),
         amplitude=1.0,
@@ -72,17 +72,17 @@ print(f"Total |H|^2: {total_H2:.4e}")
 
 # Also demonstrate a dielectric slab
 print("\n--- With dielectric slab (eps_r=4) ---")
-grid2 = ns.EMGrid3D(
+grid2 = jp.EMGrid3D(
     size=(n, n, n), resolution=resolution, boundary="absorbing", pml_layers=6
 )
 grid2.add_source(
-    ns.PointSource3D(frequency=3e9, position=(center, center, center))
+    jp.PointSource3D(frequency=3e9, position=(center, center, center))
 )
 
 # Add dielectric slab on one side
 mask = jnp.zeros((n, n, n), dtype=bool)
 mask = mask.at[center + 5 :, :, :].set(True)
-grid2.add_material(ns.DielectricRegion(mask=mask, epsilon_r=4.0))
+grid2.add_material(jp.DielectricRegion(mask=mask, epsilon_r=4.0))
 
 fields2 = grid2.simulate(t_span=(0, 3e-9), save_every=10)
 ez_mid2 = fields2.ez[-1, :, :, center]

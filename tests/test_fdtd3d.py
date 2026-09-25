@@ -4,8 +4,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from neurosim.em.fdtd3d import DielectricRegion, EMGrid3D, PointSource3D
-from neurosim.exceptions import ConfigurationError
+from jaxphys.em.fdtd3d import DielectricRegion, EMGrid3D, PointSource3D
+from jaxphys.exceptions import ConfigurationError
 
 jax.config.update("jax_enable_x64", True)
 

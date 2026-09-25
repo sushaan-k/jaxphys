@@ -11,7 +11,7 @@ Usage:
 import jax
 import jax.numpy as jnp
 
-import neurosim as ns
+import jaxphys as jp
 
 jax.config.update("jax_enable_x64", True)
 
@@ -19,10 +19,10 @@ jax.config.update("jax_enable_x64", True)
 def main() -> None:
     """Run the quantum tunneling simulation."""
     # Define the potential barrier
-    barrier = ns.SquareBarrier(height=5.0, width=1.0, center=10.0)
+    barrier = jp.SquareBarrier(height=5.0, width=1.0, center=10.0)
 
     # Gaussian wavepacket approaching the barrier
-    psi0 = ns.GaussianWavepacket(x0=5.0, k0=3.0, sigma=0.5)
+    psi0 = jp.GaussianWavepacket(x0=5.0, k0=3.0, sigma=0.5)
 
     print("Solving time-dependent Schrodinger equation...")
     print(f"Barrier: height={barrier.height}, width={barrier.width}")
@@ -32,7 +32,7 @@ def main() -> None:
     print(f"E {'>' if 0.5 * psi0.k0**2 > barrier.height else '<'} V0 "
           f"({'classically allowed' if 0.5 * psi0.k0**2 > barrier.height else 'tunneling regime'})")
 
-    result = ns.solve_schrodinger(
+    result = jp.solve_schrodinger(
         psi0=psi0,
         potential=barrier,
         x_range=(-5, 25),
@@ -55,8 +55,8 @@ def main() -> None:
 
     # Also solve the eigenvalue problem for the harmonic oscillator
     print("\n--- Harmonic oscillator eigenvalues ---")
-    ho = ns.HarmonicPotential(k=1.0)
-    eigen = ns.solve_eigenvalue_problem(
+    ho = jp.HarmonicPotential(k=1.0)
+    eigen = jp.solve_eigenvalue_problem(
         potential=ho, x_range=(-10, 10), n_points=500, n_states=5
     )
     for n, E in enumerate(eigen.energies):

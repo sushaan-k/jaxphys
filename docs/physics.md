@@ -1,6 +1,6 @@
 # Mathematical Foundations
 
-This document explains the mathematical framework behind neurosim's
+This document explains the mathematical framework behind jaxphys's
 physics engines.  It covers the core formalisms and the numerical
 methods used to solve them.
 
@@ -30,7 +30,7 @@ Expanding via the chain rule and solving for the acceleration:
 where M = d^2L / d(dq/dt)^2 is the *mass matrix* (Hessian of L with
 respect to the generalized velocities).
 
-neurosim derives M, dL/dq, and the mixed Hessian automatically using
+jaxphys derives M, dL/dq, and the mixed Hessian automatically using
 JAX autodiff (`jax.grad`, `jax.hessian`, `jax.jacfwd`), then solves
 the linear system at each timestep.
 
@@ -63,7 +63,7 @@ Given a Hamiltonian H(q, p) the equations of motion are:
 These equations preserve phase-space volume (Liouville's theorem) and
 are naturally suited to symplectic integrators.
 
-neurosim derives the right-hand sides via `jax.grad`:
+jaxphys derives the right-hand sides via `jax.grad`:
 
 ```python
 dq_dt =  jax.grad(H, argnums=1)(q, p, params)
@@ -146,7 +146,7 @@ For the time-dependent Schrodinger equation:
 
     i * hbar * d|psi>/dt = H |psi>
 
-with H = T + V (kinetic + potential), neurosim uses the split-operator
+with H = T + V (kinetic + potential), jaxphys uses the split-operator
 (Strang splitting) approach:
 
     |psi(t + dt)> = exp(-i V dt/2) * F^{-1}[ exp(-i T_k dt) * F[ exp(-i V dt/2) |psi(t)> ] ]

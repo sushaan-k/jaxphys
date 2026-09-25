@@ -4,9 +4,9 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-import neurosim as ns
-from neurosim.exceptions import ConfigurationError
-from neurosim.optimize import (
+import jaxphys as jp
+from jaxphys.exceptions import ConfigurationError
+from jaxphys.optimize import (
     make_parameter_grid,
     optimize,
     parameter_sweep,
@@ -188,13 +188,13 @@ class TestParameterSweep:
     def test_public_exports_available_from_package_root(self) -> None:
         """The sweep API should be reachable from the top-level package."""
 
-        assert ns.parameter_sweep is parameter_sweep
-        assert ns.make_parameter_grid is make_parameter_grid
-        assert ns.ParameterGrid.__name__ == "ParameterGrid"
-        assert ns.ParameterSweepResult.__name__ == "ParameterSweepResult"
-        assert ns.refine_parameter_sweep is refine_parameter_sweep
-        assert ns.RefinedSweepCandidate.__name__ == "RefinedSweepCandidate"
-        assert ns.SweepRefinementResult.__name__ == "SweepRefinementResult"
+        assert jp.parameter_sweep is parameter_sweep
+        assert jp.make_parameter_grid is make_parameter_grid
+        assert jp.ParameterGrid.__name__ == "ParameterGrid"
+        assert jp.ParameterSweepResult.__name__ == "ParameterSweepResult"
+        assert jp.refine_parameter_sweep is refine_parameter_sweep
+        assert jp.RefinedSweepCandidate.__name__ == "RefinedSweepCandidate"
+        assert jp.SweepRefinementResult.__name__ == "SweepRefinementResult"
 
 
 class TestSweepRefinement:

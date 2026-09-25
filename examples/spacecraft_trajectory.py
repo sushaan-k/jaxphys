@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-import neurosim as ns
+import jaxphys as jp
 
 
 def main() -> None:
@@ -22,9 +22,9 @@ def main() -> None:
     lunar_gravity = 1.62
 
     def objective(v0: float | jnp.ndarray) -> jnp.ndarray:
-        return (ns.projectile(v0=v0, angle=launch_angle, g=lunar_gravity).range - target_range) ** 2
+        return (jp.projectile(v0=v0, angle=launch_angle, g=lunar_gravity).range - target_range) ** 2
 
-    result = ns.optimize(
+    result = jp.optimize(
         objective,
         initial_guess=45.0,
         learning_rate=0.01,
@@ -33,7 +33,7 @@ def main() -> None:
         method="adam",
     )
 
-    final = ns.projectile(v0=result.x, angle=launch_angle, g=lunar_gravity)
+    final = jp.projectile(v0=result.x, angle=launch_angle, g=lunar_gravity)
     miss_distance = float(final.range - target_range)
 
     print(f"Target range: {target_range:.1f} m")
@@ -44,7 +44,7 @@ def main() -> None:
     print(f"Converged: {result.converged} after {result.n_iterations} iterations")
 
     speeds = jnp.linspace(float(result.x) * 0.75, float(result.x) * 1.25, 50)
-    ranges = jnp.array([float(ns.projectile(v0=s, angle=launch_angle, g=lunar_gravity).range) for s in speeds])
+    ranges = jnp.array([float(jp.projectile(v0=s, angle=launch_angle, g=lunar_gravity).range) for s in speeds])
     print(f"Range sweep span: {float(ranges.min()):.1f} m .. {float(ranges.max()):.1f} m")
 
 

@@ -1,6 +1,6 @@
 # GPU Acceleration
 
-`neurosim` uses JAX as its execution backend, so the same code can run
+`jaxphys` uses JAX as its execution backend, so the same code can run
 on CPU or GPU depending on which `jaxlib` build is installed in the
 environment.
 
@@ -28,7 +28,7 @@ CPU because the JIT compile overhead dominates.
 ## Setup
 
 Install a GPU-enabled JAX build that matches your platform. Then run
-the examples or tests normally; `neurosim` does not need a separate GPU
+the examples or tests normally; `jaxphys` does not need a separate GPU
 flag.
 
 ## Practical Advice

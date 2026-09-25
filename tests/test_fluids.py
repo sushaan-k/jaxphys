@@ -5,9 +5,9 @@ import jax.numpy as jnp
 import pytest
 from pydantic import ValidationError
 
-from neurosim.exceptions import ConfigurationError
-from neurosim.fluids.lbm import D2Q9, LBMGrid, Obstacle
-from neurosim.fluids.navier_stokes import NavierStokesSolver
+from jaxphys.exceptions import ConfigurationError
+from jaxphys.fluids.lbm import D2Q9, LBMGrid, Obstacle
+from jaxphys.fluids.navier_stokes import NavierStokesSolver
 
 jax.config.update("jax_enable_x64", True)
 

@@ -11,12 +11,12 @@ Usage:
 import jax
 import jax.numpy as jnp
 
-import neurosim as ns
+import jaxphys as jp
 
 jax.config.update("jax_enable_x64", True)
 
 
-def lagrangian(q: jnp.ndarray, qdot: jnp.ndarray, params: ns.Params) -> jnp.ndarray:
+def lagrangian(q: jnp.ndarray, qdot: jnp.ndarray, params: jp.Params) -> jnp.ndarray:
     """Lagrangian for the double pendulum.
 
     L = T - V where:
@@ -41,8 +41,8 @@ def lagrangian(q: jnp.ndarray, qdot: jnp.ndarray, params: ns.Params) -> jnp.ndar
 
 def main() -> None:
     """Run the double pendulum simulation."""
-    system = ns.LagrangianSystem(lagrangian, n_dof=2)
-    params = ns.Params(m1=1.0, m2=1.0, l1=1.0, l2=1.0, g=9.81)
+    system = jp.LagrangianSystem(lagrangian, n_dof=2)
+    params = jp.Params(m1=1.0, m2=1.0, l1=1.0, l2=1.0, g=9.81)
 
     # Initial conditions: both arms at angles, released from rest
     trajectory = system.simulate(
@@ -61,11 +61,11 @@ def main() -> None:
 
     # Try to visualize if matplotlib is available
     try:
-        fig = ns.plot_phase_space(trajectory, coords=[0, 1])
+        fig = jp.plot_phase_space(trajectory, coords=[0, 1])
         fig.savefig("double_pendulum_phase.png", dpi=150)
         print("Phase space plot saved to double_pendulum_phase.png")
 
-        fig = ns.plot_energy(trajectory)
+        fig = jp.plot_energy(trajectory)
         fig.savefig("double_pendulum_energy.png", dpi=150)
         print("Energy plot saved to double_pendulum_energy.png")
     except Exception as e:

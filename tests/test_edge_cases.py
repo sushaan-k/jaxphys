@@ -1,4 +1,4 @@
-"""Comprehensive edge case, accuracy, and advanced tests for neurosim.
+"""Comprehensive edge case, accuracy, and advanced tests for jaxphys.
 
 Covers:
 - Energy conservation over long simulations (symplectic integrators)
@@ -32,7 +32,7 @@ class TestEnergyConservation:
 
     def test_leapfrog_long_run_energy_bounded(self) -> None:
         """Leapfrog energy error stays bounded over 10000 steps."""
-        from neurosim.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
 
         system = HamiltonianSystem(self._sho_hamiltonian, n_dof=1)
         traj = system.simulate(
@@ -51,7 +51,7 @@ class TestEnergyConservation:
 
     def test_yoshida4_long_run_energy_bounded(self) -> None:
         """Yoshida4 energy error bounded over 10000 steps."""
-        from neurosim.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
 
         system = HamiltonianSystem(self._sho_hamiltonian, n_dof=1)
         traj = system.simulate(
@@ -70,7 +70,7 @@ class TestEnergyConservation:
 
     def test_symplectic_euler_energy_bounded(self) -> None:
         """Symplectic Euler energy error bounded (less tight than leapfrog)."""
-        from neurosim.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
 
         system = HamiltonianSystem(self._sho_hamiltonian, n_dof=1)
         traj = system.simulate(
@@ -88,7 +88,7 @@ class TestEnergyConservation:
 
     def test_euler_energy_drifts(self) -> None:
         """Non-symplectic Euler should show unbounded energy drift."""
-        from neurosim.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
 
         system = HamiltonianSystem(self._sho_hamiltonian, n_dof=1)
         traj = system.simulate(
@@ -105,7 +105,7 @@ class TestEnergyConservation:
 
     def test_nbody_two_body_energy_conservation(self) -> None:
         """Two-body problem energy should be well-conserved."""
-        from neurosim.classical.nbody import NBody
+        from jaxphys.classical.nbody import NBody
 
         system = NBody(
             masses=[1.0, 1.0],
@@ -121,7 +121,7 @@ class TestEnergyConservation:
 
     def test_rigid_body_torque_free_energy_conservation(self) -> None:
         """Torque-free rigid body should conserve rotational energy."""
-        from neurosim.classical.rigid_body import RigidBody
+        from jaxphys.classical.rigid_body import RigidBody
 
         body = RigidBody(inertia=[1.0, 2.0, 3.0])
         traj = body.simulate(
@@ -142,8 +142,8 @@ class TestNumericalAccuracy:
 
     def test_harmonic_oscillator_period(self) -> None:
         """SHO with omega=2 has period pi. Position should return after T."""
-        from neurosim.classical.hamiltonian import HamiltonianSystem
-        from neurosim.config import Params
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.config import Params
 
         def H(q, p, params):
             return p[0] ** 2 / (2 * params.m) + 0.5 * params.k * q[0] ** 2
@@ -164,8 +164,8 @@ class TestNumericalAccuracy:
 
     def test_harmonic_oscillator_half_period(self) -> None:
         """After half period, position should be ~-1.0 (for cos motion)."""
-        from neurosim.classical.hamiltonian import HamiltonianSystem
-        from neurosim.config import Params
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.config import Params
 
         def H(q, p, params):
             return p[0] ** 2 / (2 * params.m) + 0.5 * params.k * q[0] ** 2
@@ -186,7 +186,7 @@ class TestNumericalAccuracy:
 
     def test_kepler_orbit_period(self) -> None:
         """Circular orbit period: T = 2*pi*r^{3/2}/sqrt(GM)."""
-        from neurosim.classical.nbody import NBody
+        from jaxphys.classical.nbody import NBody
 
         # Central mass = 1.0 at origin, test mass orbiting at r=1
         # Circular velocity: v = sqrt(GM/r) = 1.0
@@ -211,8 +211,8 @@ class TestNumericalAccuracy:
 
     def test_qho_eigenvalues_accuracy(self) -> None:
         """QHO eigenvalues E_n = (n+0.5)*hbar*omega with high accuracy."""
-        from neurosim.quantum.schrodinger import HarmonicPotential
-        from neurosim.quantum.stationary import solve_eigenvalue_problem
+        from jaxphys.quantum.schrodinger import HarmonicPotential
+        from jaxphys.quantum.stationary import solve_eigenvalue_problem
 
         result = solve_eigenvalue_problem(
             potential=HarmonicPotential(k=1.0),
@@ -228,7 +228,7 @@ class TestNumericalAccuracy:
 
     def test_free_particle_wavepacket_spreading(self) -> None:
         """Free Gaussian wavepacket width should grow as sqrt(1 + (t/tau)^2)."""
-        from neurosim.quantum.schrodinger import (
+        from jaxphys.quantum.schrodinger import (
             GaussianWavepacket,
             solve_schrodinger,
         )
@@ -271,7 +271,7 @@ class TestNumericalAccuracy:
 
     def test_single_slit_first_minimum(self) -> None:
         """First minimum of single slit at sin(theta) = lambda/a."""
-        from neurosim.optics.diffraction import single_slit
+        from jaxphys.optics.diffraction import single_slit
 
         a = 1e-4  # slit width
         lam = 500e-9  # wavelength
@@ -288,7 +288,7 @@ class TestNumericalAccuracy:
 
     def test_waveguide_cutoff_ordering(self) -> None:
         """Lower-order modes should have lower cutoff frequencies."""
-        from neurosim.em.waveguides import RectangularWaveguide
+        from jaxphys.em.waveguides import RectangularWaveguide
 
         wg = RectangularWaveguide(a=0.02286, b=0.01016)
         fc_10 = wg.cutoff_frequency(1, 0)
@@ -308,7 +308,7 @@ class TestEdgeCases:
 
     def test_zero_coupling_ising(self) -> None:
         """With J=0, magnetization should be near zero at any T."""
-        from neurosim.statmech.ising import IsingLattice
+        from jaxphys.statmech.ising import IsingLattice
 
         lattice = IsingLattice(size=(8, 8), J=0.0)
         result = lattice.run_metropolis(
@@ -322,7 +322,7 @@ class TestEdgeCases:
 
     def test_single_body_nbody(self) -> None:
         """Single particle N-body should just stay in place (no forces)."""
-        from neurosim.classical.nbody import NBody
+        from jaxphys.classical.nbody import NBody
 
         system = NBody(
             masses=[1.0],
@@ -337,8 +337,8 @@ class TestEdgeCases:
 
     def test_negative_mass_rejected(self) -> None:
         """NBody should reject negative masses."""
-        from neurosim.classical.nbody import NBody
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.classical.nbody import NBody
+        from jaxphys.exceptions import ConfigurationError
 
         with pytest.raises(ConfigurationError, match="positive"):
             NBody(
@@ -349,8 +349,8 @@ class TestEdgeCases:
 
     def test_zero_mass_rejected(self) -> None:
         """NBody should reject zero masses."""
-        from neurosim.classical.nbody import NBody
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.classical.nbody import NBody
+        from jaxphys.exceptions import ConfigurationError
 
         with pytest.raises(ConfigurationError, match="positive"):
             NBody(
@@ -361,7 +361,7 @@ class TestEdgeCases:
 
     def test_small_timestep_accuracy(self) -> None:
         """Very small dt should give very accurate single step."""
-        from neurosim.classical.integrators import leapfrog
+        from jaxphys.classical.integrators import leapfrog
 
         q = jnp.array([1.0])
         p = jnp.array([0.0])
@@ -377,7 +377,7 @@ class TestEdgeCases:
 
     def test_large_timestep_leapfrog_does_not_crash(self) -> None:
         """Leapfrog with large dt should not crash (may be inaccurate)."""
-        from neurosim.classical.integrators import leapfrog
+        from jaxphys.classical.integrators import leapfrog
 
         q = jnp.array([1.0])
         p = jnp.array([0.0])
@@ -393,7 +393,7 @@ class TestEdgeCases:
 
     def test_stormer_verlet_is_leapfrog(self) -> None:
         """Stormer-Verlet should produce identical results to leapfrog."""
-        from neurosim.classical.integrators import leapfrog, stormer_verlet
+        from jaxphys.classical.integrators import leapfrog, stormer_verlet
 
         q = jnp.array([1.0, 0.5])
         p = jnp.array([0.3, -0.2])
@@ -409,8 +409,8 @@ class TestEdgeCases:
 
     def test_lagrangian_invalid_tspan(self) -> None:
         """t_end <= t_start should raise ConfigurationError."""
-        from neurosim.classical.lagrangian import LagrangianSystem
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.classical.lagrangian import LagrangianSystem
+        from jaxphys.exceptions import ConfigurationError
 
         def L(q, qdot, p):
             return 0.5 * qdot[0] ** 2
@@ -421,8 +421,8 @@ class TestEdgeCases:
 
     def test_lagrangian_negative_dt(self) -> None:
         """Negative dt should raise ConfigurationError."""
-        from neurosim.classical.lagrangian import LagrangianSystem
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.classical.lagrangian import LagrangianSystem
+        from jaxphys.exceptions import ConfigurationError
 
         def L(q, qdot, p):
             return 0.5 * qdot[0] ** 2
@@ -433,8 +433,8 @@ class TestEdgeCases:
 
     def test_hamiltonian_invalid_tspan(self) -> None:
         """Hamiltonian t_end <= t_start should raise."""
-        from neurosim.classical.hamiltonian import HamiltonianSystem
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.exceptions import ConfigurationError
 
         def H(q, p, params):
             return 0.5 * p[0] ** 2
@@ -445,8 +445,8 @@ class TestEdgeCases:
 
     def test_hamiltonian_shape_mismatch_q(self) -> None:
         """Wrong q0 shape should raise ConfigurationError."""
-        from neurosim.classical.hamiltonian import HamiltonianSystem
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.exceptions import ConfigurationError
 
         def H(q, p, params):
             return 0.5 * p[0] ** 2
@@ -457,8 +457,8 @@ class TestEdgeCases:
 
     def test_hamiltonian_shape_mismatch_p(self) -> None:
         """Wrong p0 shape should raise ConfigurationError."""
-        from neurosim.classical.hamiltonian import HamiltonianSystem
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.exceptions import ConfigurationError
 
         def H(q, p, params):
             return 0.5 * p[0] ** 2
@@ -469,8 +469,8 @@ class TestEdgeCases:
 
     def test_hamiltonian_invalid_n_dof(self) -> None:
         """n_dof=0 should raise ConfigurationError."""
-        from neurosim.classical.hamiltonian import HamiltonianSystem
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.exceptions import ConfigurationError
 
         def H(q, p, params):
             return 0.0
@@ -498,8 +498,8 @@ class TestVisualization:
         self._require_matplotlib()
         import matplotlib.pyplot as plt
 
-        from neurosim.classical.hamiltonian import HamiltonianSystem
-        from neurosim.viz.phase_space import plot_phase_space
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.viz.phase_space import plot_phase_space
 
         def H(q, p, params):
             return 0.5 * p[0] ** 2 + 0.5 * q[0] ** 2
@@ -518,8 +518,8 @@ class TestVisualization:
         self._require_matplotlib()
         import matplotlib.pyplot as plt
 
-        from neurosim.classical.hamiltonian import HamiltonianSystem
-        from neurosim.viz.phase_space import plot_energy
+        from jaxphys.classical.hamiltonian import HamiltonianSystem
+        from jaxphys.viz.phase_space import plot_energy
 
         def H(q, p, params):
             return 0.5 * p[0] ** 2 + 0.5 * q[0] ** 2
@@ -537,9 +537,9 @@ class TestVisualization:
         """plot_energy should raise if trajectory has no energy data."""
         self._require_matplotlib()
 
-        from neurosim.exceptions import VisualizationError
-        from neurosim.state import Trajectory
-        from neurosim.viz.phase_space import plot_energy
+        from jaxphys.exceptions import VisualizationError
+        from jaxphys.state import Trajectory
+        from jaxphys.viz.phase_space import plot_energy
 
         traj = Trajectory(
             t=jnp.array([0.0, 1.0]),
@@ -555,8 +555,8 @@ class TestVisualization:
         self._require_matplotlib()
         import matplotlib.pyplot as plt
 
-        from neurosim.state import Trajectory
-        from neurosim.viz.phase_space import plot_phase_space
+        from jaxphys.state import Trajectory
+        from jaxphys.viz.phase_space import plot_phase_space
 
         traj = Trajectory(
             t=jnp.linspace(0, 1, 50),
@@ -573,8 +573,8 @@ class TestVisualization:
         self._require_matplotlib()
         import matplotlib.pyplot as plt
 
-        from neurosim.state import Trajectory
-        from neurosim.viz.animate import animate_pendulum
+        from jaxphys.state import Trajectory
+        from jaxphys.viz.animate import animate_pendulum
 
         traj = Trajectory(
             t=jnp.linspace(0, 1, 20),
@@ -590,8 +590,8 @@ class TestVisualization:
         self._require_matplotlib()
         import matplotlib.pyplot as plt
 
-        from neurosim.state import QuantumResult
-        from neurosim.viz.animate import animate_wavefunction
+        from jaxphys.state import QuantumResult
+        from jaxphys.viz.animate import animate_wavefunction
 
         x = jnp.linspace(-5, 5, 100)
         psi = jnp.exp(-(x**2) / 2.0).astype(jnp.complex128)
@@ -612,8 +612,8 @@ class TestVisualization:
         self._require_matplotlib()
         import matplotlib.pyplot as plt
 
-        from neurosim.state import EMFieldHistory
-        from neurosim.viz.fields import plot_field_snapshot
+        from jaxphys.state import EMFieldHistory
+        from jaxphys.viz.fields import plot_field_snapshot
 
         # Create minimal field data
         fields = EMFieldHistory(
@@ -632,9 +632,9 @@ class TestVisualization:
         """plot_field_snapshot with bad component should raise."""
         self._require_matplotlib()
 
-        from neurosim.exceptions import VisualizationError
-        from neurosim.state import EMFieldHistory
-        from neurosim.viz.fields import plot_field_snapshot
+        from jaxphys.exceptions import VisualizationError
+        from jaxphys.state import EMFieldHistory
+        from jaxphys.viz.fields import plot_field_snapshot
 
         fields = EMFieldHistory(
             t=jnp.array([0.0]),
@@ -652,8 +652,8 @@ class TestVisualization:
         self._require_matplotlib()
         import matplotlib.pyplot as plt
 
-        from neurosim.state import IsingResult
-        from neurosim.viz.phase_space import plot_phase_transition
+        from jaxphys.state import IsingResult
+        from jaxphys.viz.phase_space import plot_phase_transition
 
         result = IsingResult(
             temperatures=jnp.linspace(1, 4, 5),
@@ -672,8 +672,8 @@ class TestVisualization:
         self._require_matplotlib()
         import matplotlib.pyplot as plt
 
-        from neurosim.state import IsingResult
-        from neurosim.viz.phase_space import plot_specific_heat
+        from jaxphys.state import IsingResult
+        from jaxphys.viz.phase_space import plot_specific_heat
 
         result = IsingResult(
             temperatures=jnp.linspace(1, 4, 5),
@@ -698,7 +698,7 @@ class TestConfigValidation:
     def test_simulation_config_t_end_must_be_positive(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import SimulationConfig
+        from jaxphys.config import SimulationConfig
 
         with pytest.raises(ValidationError):
             SimulationConfig(t_end=0.0)
@@ -706,7 +706,7 @@ class TestConfigValidation:
     def test_simulation_config_dt_must_be_positive(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import SimulationConfig
+        from jaxphys.config import SimulationConfig
 
         with pytest.raises(ValidationError):
             SimulationConfig(t_end=1.0, dt=0.0)
@@ -714,7 +714,7 @@ class TestConfigValidation:
     def test_simulation_config_save_every_must_be_ge1(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import SimulationConfig
+        from jaxphys.config import SimulationConfig
 
         with pytest.raises(ValidationError):
             SimulationConfig(t_end=1.0, save_every=0)
@@ -722,7 +722,7 @@ class TestConfigValidation:
     def test_nbody_config_negative_softening(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import NBodyConfig
+        from jaxphys.config import NBodyConfig
 
         with pytest.raises(ValidationError):
             NBodyConfig(softening=-1.0)
@@ -730,7 +730,7 @@ class TestConfigValidation:
     def test_nbody_config_zero_G(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import NBodyConfig
+        from jaxphys.config import NBodyConfig
 
         with pytest.raises(ValidationError):
             NBodyConfig(G=0.0)
@@ -738,7 +738,7 @@ class TestConfigValidation:
     def test_em_config_zero_resolution(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import EMConfig
+        from jaxphys.config import EMConfig
 
         with pytest.raises(ValidationError):
             EMConfig(resolution=0.0)
@@ -746,7 +746,7 @@ class TestConfigValidation:
     def test_em_config_invalid_courant(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import EMConfig
+        from jaxphys.config import EMConfig
 
         with pytest.raises(ValidationError):
             EMConfig(courant_number=1.5)
@@ -754,7 +754,7 @@ class TestConfigValidation:
     def test_quantum_config_negative_hbar(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import QuantumConfig
+        from jaxphys.config import QuantumConfig
 
         with pytest.raises(ValidationError):
             QuantumConfig(hbar=-1.0)
@@ -762,7 +762,7 @@ class TestConfigValidation:
     def test_quantum_config_negative_mass(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import QuantumConfig
+        from jaxphys.config import QuantumConfig
 
         with pytest.raises(ValidationError):
             QuantumConfig(mass=-1.0)
@@ -770,7 +770,7 @@ class TestConfigValidation:
     def test_quantum_config_too_few_points(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import QuantumConfig
+        from jaxphys.config import QuantumConfig
 
         with pytest.raises(ValidationError):
             QuantumConfig(n_points=5)
@@ -778,7 +778,7 @@ class TestConfigValidation:
     def test_quantum_config_invalid_method(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import QuantumConfig
+        from jaxphys.config import QuantumConfig
 
         with pytest.raises(ValidationError):
             QuantumConfig(method="euler")
@@ -786,20 +786,20 @@ class TestConfigValidation:
     def test_ising_config_invalid_algorithm(self) -> None:
         from pydantic import ValidationError
 
-        from neurosim.config import IsingConfig
+        from jaxphys.config import IsingConfig
 
         with pytest.raises(ValidationError):
             IsingConfig(algorithm="invalid")
 
     def test_params_access_nonexistent(self) -> None:
-        from neurosim.config import Params
+        from jaxphys.config import Params
 
         p = Params(x=1.0)
         with pytest.raises(AttributeError):
             _ = p.y
 
     def test_params_private_attr_raises(self) -> None:
-        from neurosim.config import Params
+        from jaxphys.config import Params
 
         p = Params(x=1.0)
         with pytest.raises(AttributeError):
@@ -816,7 +816,7 @@ class TestRigidBodyQuaternion:
 
     def test_quaternion_stays_normalized(self) -> None:
         """Quaternion norm should stay 1 throughout the simulation."""
-        from neurosim.classical.rigid_body import RigidBody
+        from jaxphys.classical.rigid_body import RigidBody
 
         body = RigidBody(inertia=[1.0, 2.0, 3.0])
         traj = body.simulate(
@@ -830,7 +830,7 @@ class TestRigidBodyQuaternion:
 
     def test_custom_initial_quaternion(self) -> None:
         """Non-identity initial quaternion should be normalized."""
-        from neurosim.classical.rigid_body import RigidBody
+        from jaxphys.classical.rigid_body import RigidBody
 
         body = RigidBody(inertia=[1.0, 1.0, 1.0])
         # Unnormalized quaternion
@@ -845,7 +845,7 @@ class TestRigidBodyQuaternion:
 
     def test_angular_momentum_conservation_torque_free(self) -> None:
         """Torque-free: |L| should be conserved."""
-        from neurosim.classical.rigid_body import RigidBody
+        from jaxphys.classical.rigid_body import RigidBody
 
         body = RigidBody(inertia=[1.0, 2.0, 3.0])
         traj = body.simulate(
@@ -861,16 +861,16 @@ class TestRigidBodyQuaternion:
 
     def test_rigid_body_invalid_inertia_shape(self) -> None:
         """Wrong shape inertia should raise."""
-        from neurosim.classical.rigid_body import RigidBody
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.classical.rigid_body import RigidBody
+        from jaxphys.exceptions import ConfigurationError
 
         with pytest.raises(ConfigurationError, match="shape"):
             RigidBody(inertia=[1.0, 2.0])
 
     def test_rigid_body_invalid_omega_shape(self) -> None:
         """Wrong omega0 shape should raise."""
-        from neurosim.classical.rigid_body import RigidBody
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.classical.rigid_body import RigidBody
+        from jaxphys.exceptions import ConfigurationError
 
         body = RigidBody(inertia=[1.0, 2.0, 3.0])
         with pytest.raises(ConfigurationError, match="shape"):
@@ -878,7 +878,7 @@ class TestRigidBodyQuaternion:
 
     def test_symmetric_top_precession(self) -> None:
         """Symmetric top (I1=I2!=I3) should show regular precession."""
-        from neurosim.classical.rigid_body import RigidBody
+        from jaxphys.classical.rigid_body import RigidBody
 
         body = RigidBody(inertia=[1.0, 1.0, 2.0])
         traj = body.simulate(
@@ -903,7 +903,7 @@ class TestDiffractionSymmetry:
 
     def test_single_slit_even_symmetry(self) -> None:
         """Single slit pattern I(theta) = I(-theta)."""
-        from neurosim.optics.diffraction import single_slit
+        from jaxphys.optics.diffraction import single_slit
 
         result = single_slit(slit_width=5e-5, wavelength=600e-9, n_points=2001)
         n = result.intensity.shape[0]
@@ -913,7 +913,7 @@ class TestDiffractionSymmetry:
 
     def test_double_slit_even_symmetry(self) -> None:
         """Double slit pattern should also be symmetric."""
-        from neurosim.optics.diffraction import double_slit
+        from jaxphys.optics.diffraction import double_slit
 
         result = double_slit(
             slit_width=5e-5,
@@ -928,7 +928,7 @@ class TestDiffractionSymmetry:
 
     def test_circular_aperture_even_symmetry(self) -> None:
         """Circular aperture Airy pattern should be symmetric."""
-        from neurosim.optics.diffraction import circular_aperture
+        from jaxphys.optics.diffraction import circular_aperture
 
         result = circular_aperture(diameter=1e-3, wavelength=500e-9, n_points=2001)
         n = result.intensity.shape[0]
@@ -938,7 +938,7 @@ class TestDiffractionSymmetry:
 
     def test_single_slit_peak_value_one(self) -> None:
         """Central peak I(0)=1 for all slit widths and wavelengths."""
-        from neurosim.optics.diffraction import single_slit
+        from jaxphys.optics.diffraction import single_slit
 
         for a, lam in [(1e-4, 500e-9), (5e-5, 700e-9), (2e-4, 400e-9)]:
             result = single_slit(slit_width=a, wavelength=lam, n_points=1001)
@@ -947,7 +947,7 @@ class TestDiffractionSymmetry:
 
     def test_double_slit_has_multiple_peaks(self) -> None:
         """Double slit should have interference maxima (multiple peaks)."""
-        from neurosim.optics.diffraction import double_slit
+        from jaxphys.optics.diffraction import double_slit
 
         result = double_slit(
             slit_width=5e-5,
@@ -963,22 +963,22 @@ class TestDiffractionSymmetry:
         assert n_peaks >= 3  # at least 3 visible peaks
 
     def test_single_slit_invalid_negative_width(self) -> None:
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.optics.diffraction import single_slit
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.optics.diffraction import single_slit
 
         with pytest.raises(ConfigurationError):
             single_slit(slit_width=-1e-4, wavelength=500e-9)
 
     def test_single_slit_invalid_negative_wavelength(self) -> None:
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.optics.diffraction import single_slit
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.optics.diffraction import single_slit
 
         with pytest.raises(ConfigurationError):
             single_slit(slit_width=1e-4, wavelength=-500e-9)
 
     def test_double_slit_separation_less_than_width_error(self) -> None:
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.optics.diffraction import double_slit
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.optics.diffraction import double_slit
 
         with pytest.raises(ConfigurationError, match="separation"):
             double_slit(
@@ -988,15 +988,15 @@ class TestDiffractionSymmetry:
             )
 
     def test_circular_aperture_invalid_diameter(self) -> None:
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.optics.diffraction import circular_aperture
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.optics.diffraction import circular_aperture
 
         with pytest.raises(ConfigurationError):
             circular_aperture(diameter=-1, wavelength=500e-9)
 
     def test_angle_degrees_property(self) -> None:
         """DiffractionResult.angle_degrees should convert correctly."""
-        from neurosim.optics.diffraction import single_slit
+        from jaxphys.optics.diffraction import single_slit
 
         result = single_slit(slit_width=1e-4, wavelength=500e-9, n_points=101)
         degs = result.angle_degrees
@@ -1014,7 +1014,7 @@ class TestDensityMatrixTracePreservation:
 
     def test_trace_preserved_unitary(self) -> None:
         """Unitary evolution (no dissipation) should preserve Tr(rho)=1."""
-        from neurosim.quantum.density_matrix import DensityMatrix, lindblad_evolve
+        from jaxphys.quantum.density_matrix import DensityMatrix, lindblad_evolve
 
         psi = jnp.array([1.0, 0.0], dtype=jnp.complex128)
         dm = DensityMatrix.from_pure_state(psi)
@@ -1029,7 +1029,7 @@ class TestDensityMatrixTracePreservation:
 
     def test_trace_preserved_dissipative(self) -> None:
         """Dissipative Lindblad evolution should still preserve trace."""
-        from neurosim.quantum.density_matrix import DensityMatrix, lindblad_evolve
+        from jaxphys.quantum.density_matrix import DensityMatrix, lindblad_evolve
 
         psi = jnp.array([0.0, 1.0], dtype=jnp.complex128)
         dm = DensityMatrix.from_pure_state(psi)
@@ -1044,7 +1044,7 @@ class TestDensityMatrixTracePreservation:
 
     def test_purity_decreases_under_dissipation(self) -> None:
         """Purity should decrease from 1 under dissipative evolution."""
-        from neurosim.quantum.density_matrix import DensityMatrix, lindblad_evolve
+        from jaxphys.quantum.density_matrix import DensityMatrix, lindblad_evolve
 
         psi = jnp.array([0.0, 1.0], dtype=jnp.complex128)
         dm = DensityMatrix.from_pure_state(psi)
@@ -1060,7 +1060,7 @@ class TestDensityMatrixTracePreservation:
 
     def test_purity_preserved_unitary(self) -> None:
         """Unitary evolution should preserve purity exactly."""
-        from neurosim.quantum.density_matrix import DensityMatrix, lindblad_evolve
+        from jaxphys.quantum.density_matrix import DensityMatrix, lindblad_evolve
 
         psi = jnp.array([1.0 / jnp.sqrt(2), 1.0 / jnp.sqrt(2)], dtype=jnp.complex128)
         dm = DensityMatrix.from_pure_state(psi)
@@ -1072,7 +1072,7 @@ class TestDensityMatrixTracePreservation:
 
     def test_thermal_state_is_mixed(self) -> None:
         """Thermal state at finite T should have purity < 1."""
-        from neurosim.quantum.density_matrix import DensityMatrix
+        from jaxphys.quantum.density_matrix import DensityMatrix
 
         H = jnp.array([[0.0, 0.0], [0.0, 1.0]], dtype=jnp.complex128)
         dm = DensityMatrix.thermal_state(H, temperature=1.0)
@@ -1081,8 +1081,8 @@ class TestDensityMatrixTracePreservation:
 
     def test_thermal_state_negative_temp_raises(self) -> None:
         """Negative temperature should raise ConfigurationError."""
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.quantum.density_matrix import DensityMatrix
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.quantum.density_matrix import DensityMatrix
 
         H = jnp.eye(2, dtype=jnp.complex128)
         with pytest.raises(ConfigurationError, match="positive"):
@@ -1090,7 +1090,7 @@ class TestDensityMatrixTracePreservation:
 
     def test_expectation_value(self) -> None:
         """Tr(rho * sigma_z) for |0> should be 1."""
-        from neurosim.quantum.density_matrix import DensityMatrix
+        from jaxphys.quantum.density_matrix import DensityMatrix
 
         psi = jnp.array([1.0, 0.0], dtype=jnp.complex128)
         dm = DensityMatrix.from_pure_state(psi)
@@ -1100,7 +1100,7 @@ class TestDensityMatrixTracePreservation:
 
     def test_dimension_property(self) -> None:
         """DensityMatrix.dimension should return correct Hilbert space dim."""
-        from neurosim.quantum.density_matrix import DensityMatrix
+        from jaxphys.quantum.density_matrix import DensityMatrix
 
         rho = jnp.eye(4, dtype=jnp.complex128) / 4
         dm = DensityMatrix(rho=rho)
@@ -1108,8 +1108,8 @@ class TestDensityMatrixTracePreservation:
 
     def test_lindblad_mismatched_ops_rates(self) -> None:
         """Mismatched Lindblad ops and rates should raise."""
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.quantum.density_matrix import DensityMatrix, lindblad_evolve
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.quantum.density_matrix import DensityMatrix, lindblad_evolve
 
         dm = DensityMatrix.from_pure_state(jnp.array([1.0, 0.0], dtype=jnp.complex128))
         H = jnp.zeros((2, 2), dtype=jnp.complex128)
@@ -1128,8 +1128,8 @@ class TestSchrodingerEdgeCases:
 
     def test_invalid_x_range(self) -> None:
         """x_max <= x_min should raise."""
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.quantum.schrodinger import (
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.quantum.schrodinger import (
             GaussianWavepacket,
             HarmonicPotential,
             solve_schrodinger,
@@ -1144,7 +1144,7 @@ class TestSchrodingerEdgeCases:
 
     def test_harmonic_potential_symmetry(self) -> None:
         """V(x) = V(-x) for symmetric harmonic potential."""
-        from neurosim.quantum.schrodinger import HarmonicPotential
+        from jaxphys.quantum.schrodinger import HarmonicPotential
 
         V = HarmonicPotential(k=2.0, x0=0.0)
         x = jnp.linspace(-5, 5, 101)
@@ -1153,7 +1153,7 @@ class TestSchrodingerEdgeCases:
 
     def test_double_well_symmetry(self) -> None:
         """Double well V(x) = a(x^2-b)^2 should be symmetric."""
-        from neurosim.quantum.schrodinger import DoubleWellPotential
+        from jaxphys.quantum.schrodinger import DoubleWellPotential
 
         V = DoubleWellPotential(a=1.0, b=1.0)
         x = jnp.linspace(-3, 3, 201)
@@ -1162,7 +1162,7 @@ class TestSchrodingerEdgeCases:
 
     def test_norm_preservation_harmonic(self) -> None:
         """Norm should be preserved for harmonic potential evolution."""
-        from neurosim.quantum.schrodinger import (
+        from jaxphys.quantum.schrodinger import (
             GaussianWavepacket,
             HarmonicPotential,
             solve_schrodinger,
@@ -1183,9 +1183,9 @@ class TestSchrodingerEdgeCases:
 
     def test_stationary_x_range_invalid(self) -> None:
         """Stationary solver with invalid x_range should raise."""
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.quantum.schrodinger import HarmonicPotential
-        from neurosim.quantum.stationary import solve_eigenvalue_problem
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.quantum.schrodinger import HarmonicPotential
+        from jaxphys.quantum.stationary import solve_eigenvalue_problem
 
         with pytest.raises(ConfigurationError, match="x_max"):
             solve_eigenvalue_problem(
@@ -1195,9 +1195,9 @@ class TestSchrodingerEdgeCases:
 
     def test_stationary_n_states_exceeds_n_points(self) -> None:
         """n_states > n_points should raise."""
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.quantum.schrodinger import HarmonicPotential
-        from neurosim.quantum.stationary import solve_eigenvalue_problem
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.quantum.schrodinger import HarmonicPotential
+        from jaxphys.quantum.stationary import solve_eigenvalue_problem
 
         with pytest.raises(ConfigurationError, match="n_states"):
             solve_eigenvalue_problem(
@@ -1217,7 +1217,7 @@ class TestSpinChainEdgeCases:
 
     def test_min_sites(self) -> None:
         """Minimum valid chain is 2 sites."""
-        from neurosim.quantum.spin import SpinChain
+        from jaxphys.quantum.spin import SpinChain
 
         chain = SpinChain(n_sites=2, J=1.0)
         result = chain.diagonalize(n_states=4)
@@ -1226,15 +1226,15 @@ class TestSpinChainEdgeCases:
 
     def test_single_site_rejected(self) -> None:
         """1 site should raise ConfigurationError."""
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.quantum.spin import SpinChain
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.quantum.spin import SpinChain
 
         with pytest.raises(ConfigurationError, match="n_sites"):
             SpinChain(n_sites=1)
 
     def test_periodic_vs_open_chain(self) -> None:
         """Periodic and open BC should give different ground state energies."""
-        from neurosim.quantum.spin import SpinChain
+        from jaxphys.quantum.spin import SpinChain
 
         open_chain = SpinChain(n_sites=4, J=1.0, periodic=False)
         periodic_chain = SpinChain(n_sites=4, J=1.0, periodic=True)
@@ -1245,7 +1245,7 @@ class TestSpinChainEdgeCases:
 
     def test_hamiltonian_is_hermitian(self) -> None:
         """Spin chain Hamiltonian should be Hermitian."""
-        from neurosim.quantum.spin import SpinChain
+        from jaxphys.quantum.spin import SpinChain
 
         chain = SpinChain(n_sites=3, J=1.0, h=0.5)
         H = chain.build_hamiltonian()
@@ -1253,7 +1253,7 @@ class TestSpinChainEdgeCases:
 
     def test_zero_field_magnetization(self) -> None:
         """Ground state of AFM (J<0) at h=0 should have ~0 magnetization."""
-        from neurosim.quantum.spin import SpinChain
+        from jaxphys.quantum.spin import SpinChain
 
         chain = SpinChain(n_sites=4, J=-1.0, h=0.0)
         result = chain.diagonalize(n_states=1)
@@ -1271,8 +1271,8 @@ class TestRayTracingEdgeCases:
 
     def test_zero_focal_length_raises(self) -> None:
         """Thin lens with f=0 should raise."""
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.optics.ray_tracing import ThinLens
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.optics.ray_tracing import ThinLens
 
         lens = ThinLens(f=0)
         with pytest.raises(ConfigurationError, match="Focal length"):
@@ -1280,8 +1280,8 @@ class TestRayTracingEdgeCases:
 
     def test_spherical_mirror_zero_R_raises(self) -> None:
         """Spherical mirror with R=0 should raise."""
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.optics.ray_tracing import SphericalMirror
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.optics.ray_tracing import SphericalMirror
 
         mirror = SphericalMirror(R=0)
         with pytest.raises(ConfigurationError, match="Radius"):
@@ -1289,7 +1289,7 @@ class TestRayTracingEdgeCases:
 
     def test_diverging_lens(self) -> None:
         """Negative focal length (diverging lens) should work."""
-        from neurosim.optics.ray_tracing import Ray, ThinLens, trace_system
+        from jaxphys.optics.ray_tracing import Ray, ThinLens, trace_system
 
         ray = Ray(y=1.0, theta=0.0)
         lens = ThinLens(f=-0.5, position=0.0)
@@ -1299,7 +1299,7 @@ class TestRayTracingEdgeCases:
 
     def test_ray_vector_conversion(self) -> None:
         """Ray.to_vector should give correct [y, theta]."""
-        from neurosim.optics.ray_tracing import Ray
+        from jaxphys.optics.ray_tracing import Ray
 
         ray = Ray(y=2.5, theta=0.03)
         v = ray.to_vector()
@@ -1308,7 +1308,7 @@ class TestRayTracingEdgeCases:
 
     def test_system_matrix_determinant(self) -> None:
         """System matrix should have det=1 (symplecticity of ray optics)."""
-        from neurosim.optics.ray_tracing import Ray, ThinLens, trace_system
+        from jaxphys.optics.ray_tracing import Ray, ThinLens, trace_system
 
         ray = Ray(y=1.0, theta=0.0)
         elements = [
@@ -1329,30 +1329,30 @@ class TestWaveguideEdgeCases:
     """Edge cases for waveguide module."""
 
     def test_negative_dimensions_raises(self) -> None:
-        from neurosim.em.waveguides import RectangularWaveguide
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.em.waveguides import RectangularWaveguide
+        from jaxphys.exceptions import ConfigurationError
 
         with pytest.raises(ConfigurationError, match="positive"):
             RectangularWaveguide(a=-0.01, b=0.01)
 
     def test_zero_dimensions_raises(self) -> None:
-        from neurosim.em.waveguides import RectangularWaveguide
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.em.waveguides import RectangularWaveguide
+        from jaxphys.exceptions import ConfigurationError
 
         with pytest.raises(ConfigurationError, match="positive"):
             RectangularWaveguide(a=0.0, b=0.01)
 
     def test_invalid_mode_type(self) -> None:
-        from neurosim.em.waveguides import RectangularWaveguide
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.em.waveguides import RectangularWaveguide
+        from jaxphys.exceptions import ConfigurationError
 
         wg = RectangularWaveguide(a=0.02, b=0.01)
         with pytest.raises(ConfigurationError, match="TE"):
             wg.compute_mode("XX", 1, 0)
 
     def test_tm_mode_requires_mn_ge_1(self) -> None:
-        from neurosim.em.waveguides import RectangularWaveguide
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.em.waveguides import RectangularWaveguide
+        from jaxphys.exceptions import ConfigurationError
 
         wg = RectangularWaveguide(a=0.02, b=0.01)
         with pytest.raises(ConfigurationError, match="m >= 1"):
@@ -1369,7 +1369,7 @@ class TestChargesEdgeCases:
 
     def test_single_charge_no_interaction(self) -> None:
         """Single charge should move freely (no Coulomb interaction)."""
-        from neurosim.em.charges import ChargeSystem, PointCharge
+        from jaxphys.em.charges import ChargeSystem, PointCharge
 
         q = PointCharge(charge=1e-6, mass=1e-3, position=[0, 0, 0], velocity=[1, 0, 0])
         system = ChargeSystem(charges=[q])
@@ -1380,8 +1380,8 @@ class TestChargesEdgeCases:
         assert final_x == pytest.approx(expected_x, abs=1e-5)
 
     def test_empty_charges_raises(self) -> None:
-        from neurosim.em.charges import ChargeSystem
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.em.charges import ChargeSystem
+        from jaxphys.exceptions import ConfigurationError
 
         with pytest.raises(ConfigurationError, match="at least one"):
             ChargeSystem(charges=[])
@@ -1397,7 +1397,7 @@ class TestOptimizeEdgeCases:
 
     def test_already_at_minimum(self) -> None:
         """Starting at the minimum should converge immediately."""
-        from neurosim.optimize import optimize
+        from jaxphys.optimize import optimize
 
         def obj(x):
             return x**2
@@ -1413,7 +1413,7 @@ class TestOptimizeEdgeCases:
 
     def test_non_convergence(self) -> None:
         """With too few iterations, should not converge."""
-        from neurosim.optimize import optimize
+        from jaxphys.optimize import optimize
 
         def obj(x):
             return (x - 100.0) ** 2
@@ -1429,7 +1429,7 @@ class TestOptimizeEdgeCases:
 
     def test_sensitivity_function(self) -> None:
         """Sensitivity (Jacobian) should match expected gradient."""
-        from neurosim.optimize import sensitivity
+        from jaxphys.optimize import sensitivity
 
         def sim_fn(params):
             return params**2
@@ -1450,7 +1450,7 @@ class TestStateContainers:
 
     def test_trajectory_energy_drift_no_energy(self) -> None:
         """energy_drift should return 0.0 when energy is None."""
-        from neurosim.state import Trajectory
+        from jaxphys.state import Trajectory
 
         traj = Trajectory(
             t=jnp.array([0.0, 1.0]),
@@ -1462,7 +1462,7 @@ class TestStateContainers:
 
     def test_trajectory_energy_drift_near_zero_energy(self) -> None:
         """When E0 ~ 0, energy_drift should use absolute measure."""
-        from neurosim.state import Trajectory
+        from jaxphys.state import Trajectory
 
         traj = Trajectory(
             t=jnp.array([0.0, 1.0]),
@@ -1474,7 +1474,7 @@ class TestStateContainers:
         assert drift < 1e-14
 
     def test_trajectory_properties(self) -> None:
-        from neurosim.state import Trajectory
+        from jaxphys.state import Trajectory
 
         traj = Trajectory(
             t=jnp.linspace(0, 10, 100),
@@ -1488,7 +1488,7 @@ class TestStateContainers:
         assert traj.final_momentum.shape == (3,)
 
     def test_nbody_trajectory_properties(self) -> None:
-        from neurosim.state import NBodyTrajectory
+        from jaxphys.state import NBodyTrajectory
 
         traj = NBodyTrajectory(
             t=jnp.linspace(0, 1, 10),
@@ -1502,7 +1502,7 @@ class TestStateContainers:
 
     def test_quantum_result_probability(self) -> None:
         """QuantumResult.probability should be |psi|^2."""
-        from neurosim.state import QuantumResult
+        from jaxphys.state import QuantumResult
 
         x = jnp.linspace(-1, 1, 10)
         psi = jnp.ones((2, 10), dtype=jnp.complex128)
@@ -1524,23 +1524,23 @@ class TestFDTDEdgeCases:
     """Edge cases for FDTD Maxwell solver."""
 
     def test_source_out_of_bounds_raises(self) -> None:
-        from neurosim.em.fdtd import EMGrid, PlaneWave
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.em.fdtd import EMGrid, PlaneWave
+        from jaxphys.exceptions import ConfigurationError
 
         grid = EMGrid(size=(50, 50))
         with pytest.raises(ConfigurationError, match="out of grid"):
             grid.add_source(PlaneWave(frequency=1e9, y=100))
 
     def test_conductor_out_of_bounds_raises(self) -> None:
-        from neurosim.em.fdtd import EMGrid, Wall
-        from neurosim.exceptions import ConfigurationError
+        from jaxphys.em.fdtd import EMGrid, Wall
+        from jaxphys.exceptions import ConfigurationError
 
         grid = EMGrid(size=(50, 50))
         with pytest.raises(ConfigurationError, match="out of grid"):
             grid.add_conductor(Wall(y=100))
 
     def test_em_grid_properties(self) -> None:
-        from neurosim.em.fdtd import EMGrid
+        from jaxphys.em.fdtd import EMGrid
 
         grid = EMGrid(size=(100, 80))
         assert grid.size == (100, 80)
@@ -1555,15 +1555,15 @@ class TestIsingEdgeCases:
     """Edge cases for Ising model."""
 
     def test_negative_temperature_raises(self) -> None:
-        from neurosim.exceptions import ConfigurationError
-        from neurosim.statmech.ising import IsingLattice
+        from jaxphys.exceptions import ConfigurationError
+        from jaxphys.statmech.ising import IsingLattice
 
         lattice = IsingLattice(size=(4, 4))
         with pytest.raises(ConfigurationError, match="positive"):
             lattice.run_metropolis(temperature=-1.0)
 
     def test_lattice_properties(self) -> None:
-        from neurosim.statmech.ising import IsingLattice
+        from jaxphys.statmech.ising import IsingLattice
 
         lattice = IsingLattice(size=(10, 8))
         assert lattice.size == (10, 8)
@@ -1571,7 +1571,7 @@ class TestIsingEdgeCases:
 
     def test_external_field_ising(self) -> None:
         """Strong external field should align spins."""
-        from neurosim.statmech.ising import IsingLattice
+        from jaxphys.statmech.ising import IsingLattice
 
         lattice = IsingLattice(size=(4, 4), J=1.0, h=10.0)
         result = lattice.run_metropolis(
@@ -1608,7 +1608,7 @@ class TestIntegratorConvergenceOrder:
 
     def test_rk4_fourth_order(self) -> None:
         """RK4 error should decrease by ~16x when dt halved."""
-        from neurosim.classical.integrators import rk4
+        from jaxphys.classical.integrators import rk4
 
         dt1 = 0.1
         dt2 = 0.05
@@ -1630,7 +1630,7 @@ class TestIntegratorConvergenceOrder:
 
     def test_leapfrog_second_order(self) -> None:
         """Leapfrog error should decrease by ~4x when dt halved."""
-        from neurosim.classical.integrators import leapfrog
+        from jaxphys.classical.integrators import leapfrog
 
         dt1 = 0.1
         dt2 = 0.05

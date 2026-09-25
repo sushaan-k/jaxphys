@@ -4,16 +4,16 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from neurosim.exceptions import ConfigurationError
-from neurosim.quantum.density_matrix import DensityMatrix, lindblad_evolve
-from neurosim.quantum.schrodinger import (
+from jaxphys.exceptions import ConfigurationError
+from jaxphys.quantum.density_matrix import DensityMatrix, lindblad_evolve
+from jaxphys.quantum.schrodinger import (
     GaussianWavepacket,
     HarmonicPotential,
     SquareBarrier,
     solve_schrodinger,
 )
-from neurosim.quantum.spin import SpinChain
-from neurosim.quantum.stationary import solve_eigenvalue_problem
+from jaxphys.quantum.spin import SpinChain
+from jaxphys.quantum.stationary import solve_eigenvalue_problem
 
 jax.config.update("jax_enable_x64", True)
 

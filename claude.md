@@ -1,4 +1,4 @@
-# neurosim
+# jaxphys
 
 ## GPU-Accelerated Differentiable Physics Engine
 
@@ -18,13 +18,13 @@ JAX made differentiable programming accessible. Nobody has built a serious physi
 
 ### The Solution
 
-`neurosim` is a JAX-based differentiable physics engine for simulating systems across classical mechanics, electromagnetism, quantum mechanics, and statistical mechanics — with GPU acceleration and automatic differentiation built in.
+`jaxphys` is a JAX-based differentiable physics engine for simulating systems across classical mechanics, electromagnetism, quantum mechanics, and statistical mechanics — with GPU acceleration and automatic differentiation built in.
 
 ### Architecture
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                      neurosim                         │
+│                      jaxphys                         │
 │                                                       │
 │  ┌─────────────────────────────────────────────────┐  │
 │  │                  Physics Modules                 │  │
@@ -80,13 +80,13 @@ JAX made differentiable programming accessible. Nobody has built a serious physi
 #### 1. Classical Mechanics
 
 **Lagrangian Mechanics Engine**:
-Define a system by its Lagrangian, and neurosim derives the equations of motion automatically using JAX's autodiff:
+Define a system by its Lagrangian, and jaxphys derives the equations of motion automatically using JAX's autodiff:
 
 ```python
-import neurosim as ns
+import jaxphys as jp
 import jax.numpy as jnp
 
-# Double pendulum — define the Lagrangian, neurosim does the rest
+# Double pendulum — define the Lagrangian, jaxphys does the rest
 def lagrangian(q, qdot, params):
     theta1, theta2 = q
     omega1, omega2 = qdot
@@ -99,8 +99,8 @@ def lagrangian(q, qdot, params):
          m2 * g * l2 * jnp.cos(theta2))
     return T - V
 
-system = ns.LagrangianSystem(lagrangian, n_dof=2)
-params = ns.Params(m1=1.0, m2=1.0, l1=1.0, l2=1.0, g=9.81)
+system = jp.LagrangianSystem(lagrangian, n_dof=2)
+params = jp.Params(m1=1.0, m2=1.0, l1=1.0, l2=1.0, g=9.81)
 
 # Simulate
 trajectory = system.simulate(
@@ -113,15 +113,15 @@ trajectory = system.simulate(
 )
 
 # Visualize
-ns.animate_pendulum(trajectory, save="double_pendulum.mp4")
-ns.plot_phase_space(trajectory, coords=[0, 1])
-ns.plot_energy(trajectory)  # verify energy conservation
+jp.animate_pendulum(trajectory, save="double_pendulum.mp4")
+jp.plot_phase_space(trajectory, coords=[0, 1])
+jp.plot_energy(trajectory)  # verify energy conservation
 ```
 
 **N-Body Simulator**:
 ```python
 # Gravitational N-body problem — GPU accelerated
-system = ns.NBody(
+system = jp.NBody(
     masses=[1.0, 0.001, 0.0003],  # Sun, Jupiter-like, Earth-like
     positions=[[0,0,0], [5.2,0,0], [1,0,0]],
     velocities=[[0,0,0], [0,2.75,0], [0,6.28,0]],
@@ -130,7 +130,7 @@ system = ns.NBody(
 
 # Simulate 1000 years with 1M timesteps on GPU
 trajectory = system.simulate(t_span=(0, 1000), n_steps=1_000_000)
-ns.animate_3d(trajectory, trails=True)
+jp.animate_3d(trajectory, trails=True)
 ```
 
 #### 2. Electromagnetism
@@ -138,21 +138,21 @@ ns.animate_3d(trajectory, trails=True)
 **FDTD Maxwell Solver**:
 ```python
 # Simulate electromagnetic wave propagation through a slit
-grid = ns.EMGrid(
+grid = jp.EMGrid(
     size=(200, 200),
     resolution=0.01,        # 1cm cells
     boundary="absorbing",   # PML boundaries
 )
 
 # Add a conducting wall with a slit
-grid.add_conductor(ns.Wall(y=100, gap_start=90, gap_end=110))
+grid.add_conductor(jp.Wall(y=100, gap_start=90, gap_end=110))
 
 # Add a plane wave source
-grid.add_source(ns.PlaneWave(frequency=3e9, y=20))  # 3 GHz
+grid.add_source(jp.PlaneWave(frequency=3e9, y=20))  # 3 GHz
 
 # Simulate
 fields = grid.simulate(t_span=(0, 1e-8), dt=1e-11)
-ns.animate_field(fields, component="Ez", save="diffraction.mp4")
+jp.animate_field(fields, component="Ez", save="diffraction.mp4")
 ```
 
 #### 3. Quantum Mechanics
@@ -160,11 +160,11 @@ ns.animate_field(fields, component="Ez", save="diffraction.mp4")
 **Schrödinger Equation Solver**:
 ```python
 # Quantum tunneling through a barrier
-potential = ns.SquareBarrier(height=5.0, width=1.0, center=10.0)
+potential = jp.SquareBarrier(height=5.0, width=1.0, center=10.0)
 
-psi0 = ns.GaussianWavepacket(x0=5.0, k0=3.0, sigma=0.5)
+psi0 = jp.GaussianWavepacket(x0=5.0, k0=3.0, sigma=0.5)
 
-result = ns.solve_schrodinger(
+result = jp.solve_schrodinger(
     psi0=psi0,
     potential=potential,
     x_range=(-5, 25),
@@ -172,7 +172,7 @@ result = ns.solve_schrodinger(
     n_points=1000,
 )
 
-ns.animate_wavefunction(result, show_probability=True, show_potential=True)
+jp.animate_wavefunction(result, show_probability=True, show_potential=True)
 print(f"Transmission coefficient: {result.transmission_coefficient:.4f}")
 ```
 
@@ -181,18 +181,18 @@ print(f"Transmission coefficient: {result.transmission_coefficient:.4f}")
 **Ising Model with GPU-Accelerated Monte Carlo**:
 ```python
 # 2D Ising model — phase transition
-lattice = ns.IsingLattice(size=(256, 256))
+lattice = jp.IsingLattice(size=(256, 256))
 
 # Sweep temperature across the critical point
-results = ns.sweep_temperatures(
+results = jp.sweep_temperatures(
     lattice,
     temperatures=jnp.linspace(1.0, 4.0, 100),
     n_sweeps=10000,
     algorithm="wolff_cluster",
 )
 
-ns.plot_phase_transition(results)  # magnetization vs temperature
-ns.plot_specific_heat(results)     # specific heat peak at T_c
+jp.plot_phase_transition(results)  # magnetization vs temperature
+jp.plot_specific_heat(results)     # specific heat peak at T_c
 ```
 
 ### The Differentiable Advantage
@@ -202,11 +202,11 @@ Because everything runs on JAX, you get automatic differentiation for free:
 ```python
 # Inverse problem: what initial velocity makes a projectile hit a target?
 def miss_distance(v0):
-    trajectory = ns.projectile(v0=v0, angle=45, g=9.81)
+    trajectory = jp.projectile(v0=v0, angle=45, g=9.81)
     return (trajectory.final_position - target)**2
 
 # Gradient descent to find optimal v0
-optimal_v0 = ns.optimize(miss_distance, initial_guess=10.0)
+optimal_v0 = jp.optimize(miss_distance, initial_guess=10.0)
 
 # Parameter sensitivity: how does changing mass affect the double pendulum?
 sensitivity = jax.jacobian(system.simulate)(params)
@@ -236,11 +236,11 @@ This enables:
 ### Repo Structure
 
 ```
-neurosim/
+jaxphys/
 ├── README.md
 ├── pyproject.toml
 ├── src/
-│   └── neurosim/
+│   └── jaxphys/
 │       ├── __init__.py
 │       ├── classical/
 │       │   ├── lagrangian.py       # Lagrangian mechanics

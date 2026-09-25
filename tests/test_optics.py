@@ -4,13 +4,13 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from neurosim.exceptions import ConfigurationError
-from neurosim.optics.diffraction import (
+from jaxphys.exceptions import ConfigurationError
+from jaxphys.optics.diffraction import (
     circular_aperture,
     double_slit,
     single_slit,
 )
-from neurosim.optics.ray_tracing import (
+from jaxphys.optics.ray_tracing import (
     FlatMirror,
     Ray,
     SphericalMirror,

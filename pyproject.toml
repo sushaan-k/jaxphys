@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "neurosim"
-version = "0.1.0"
+name = "jaxphys"
+version = "0.2.0"
 description = "GPU-accelerated differentiable physics engine built on JAX"
 readme = "README.md"
 license = "MIT"
@@ -31,6 +31,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Typing :: Typed",
@@ -53,16 +54,16 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.7",
 ]
-all = ["neurosim[viz,dev]"]
+all = ["jaxphys[viz,dev]"]
 
 [project.urls]
-Homepage = "https://github.com/sushaan-k/neurosim"
-Documentation = "https://github.com/sushaan-k/neurosim#readme"
-Repository = "https://github.com/sushaan-k/neurosim"
-Issues = "https://github.com/sushaan-k/neurosim/issues"
+Homepage = "https://github.com/sushaan-k/jaxphys"
+Documentation = "https://github.com/sushaan-k/jaxphys#readme"
+Repository = "https://github.com/sushaan-k/jaxphys"
+Issues = "https://github.com/sushaan-k/jaxphys/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/neurosim"]
+packages = ["src/jaxphys"]
 
 [tool.ruff]
 target-version = "py311"
@@ -86,10 +87,10 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/neurosim/__init__.py" = ["E402"]
+"src/jaxphys/__init__.py" = ["E402"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["neurosim"]
+known-first-party = ["jaxphys"]
 
 [tool.mypy]
 python_version = "3.11"

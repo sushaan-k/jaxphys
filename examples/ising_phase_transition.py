@@ -13,19 +13,19 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-import neurosim as ns
+import jaxphys as jp
 
 jax.config.update("jax_enable_x64", True)
 
 
 def main() -> None:
     """Run the Ising temperature sweep."""
-    lattice = ns.IsingLattice(size=(12, 12), J=1.0)
+    lattice = jp.IsingLattice(size=(12, 12), J=1.0)
     temperatures = jnp.linspace(1.7, 3.1, 6)
 
     print("Running temperature sweep...")
 
-    result = ns.sweep_temperatures(
+    result = jp.sweep_temperatures(
         lattice,
         temperatures,
         n_sweeps=12,

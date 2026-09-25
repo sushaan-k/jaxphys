@@ -14,16 +14,16 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-import neurosim as ns
+import jaxphys as jp
 
 jax.config.update("jax_enable_x64", True)
 
 
 def main() -> None:
     """Run the slit diffraction simulation."""
-    grid = ns.EMGrid(size=(60, 60), resolution=0.01, pml_layers=8)
-    grid.add_source(ns.PlaneWave(frequency=3.0e9, y=6, amplitude=1.0))
-    grid.add_conductor(ns.Wall(y=30, gap_start=26, gap_end=34))
+    grid = jp.EMGrid(size=(60, 60), resolution=0.01, pml_layers=8)
+    grid.add_source(jp.PlaneWave(frequency=3.0e9, y=6, amplitude=1.0))
+    grid.add_conductor(jp.Wall(y=30, gap_start=26, gap_end=34))
 
     fields = grid.simulate(t_span=(0.0, 1.5e-9), save_every=20)
 

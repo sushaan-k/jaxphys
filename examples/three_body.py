@@ -10,7 +10,7 @@ Usage:
 
 import jax
 
-import neurosim as ns
+import jaxphys as jp
 
 jax.config.update("jax_enable_x64", True)
 
@@ -18,7 +18,7 @@ jax.config.update("jax_enable_x64", True)
 def main() -> None:
     """Run the three-body simulation."""
     # Sun-Jupiter-Earth system (natural units: G=1)
-    system = ns.NBody(
+    system = jp.NBody(
         masses=[1.0, 0.001, 0.0003],
         positions=[
             [0.0, 0.0, 0.0],   # Sun at origin

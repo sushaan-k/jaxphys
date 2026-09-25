@@ -13,7 +13,7 @@ nu is the kinematic viscosity.
 
 import jax.numpy as jnp
 
-import neurosim as ns
+import jaxphys as jp
 
 # Grid and flow parameters
 nx, ny = 300, 100
@@ -27,12 +27,12 @@ Re = u_inlet * (2 * cylinder_r) / viscosity
 print(f"Reynolds number: Re = {Re:.1f}")
 
 # Create the LBM grid
-grid = ns.LBMGrid(size=(nx, ny), viscosity=viscosity)
+grid = jp.LBMGrid(size=(nx, ny), viscosity=viscosity)
 
 # Create cylindrical obstacle
 x, y = jnp.meshgrid(jnp.arange(nx), jnp.arange(ny), indexing="ij")
 cylinder_mask = (x - cylinder_x) ** 2 + (y - cylinder_y) ** 2 < cylinder_r**2
-grid.add_obstacle(ns.Obstacle(mask=cylinder_mask))
+grid.add_obstacle(jp.Obstacle(mask=cylinder_mask))
 
 print(f"Grid: {nx} x {ny}, viscosity: {viscosity}")
 print(f"Inlet velocity: {u_inlet}, tau: {grid.tau:.3f}")

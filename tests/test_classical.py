@@ -6,16 +6,16 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from neurosim.classical.coupled_oscillators import (
+from jaxphys.classical.coupled_oscillators import (
     coupled_oscillators,
     normal_mode_frequencies,
 )
-from neurosim.classical.hamiltonian import HamiltonianSystem
-from neurosim.classical.lagrangian import LagrangianSystem
-from neurosim.classical.nbody import NBody
-from neurosim.classical.rigid_body import RigidBody
-from neurosim.config import Params
-from neurosim.exceptions import ConfigurationError, PhysicsError
+from jaxphys.classical.hamiltonian import HamiltonianSystem
+from jaxphys.classical.lagrangian import LagrangianSystem
+from jaxphys.classical.nbody import NBody
+from jaxphys.classical.rigid_body import RigidBody
+from jaxphys.config import Params
+from jaxphys.exceptions import ConfigurationError, PhysicsError
 
 jax.config.update("jax_enable_x64", True)
 
@@ -185,7 +185,7 @@ class TestEnergyConservationDiagnostic:
 
     def test_max_energy_drift_no_energy(self) -> None:
         """max_energy_drift returns 0.0 when energy is None."""
-        from neurosim.state import Trajectory
+        from jaxphys.state import Trajectory
 
         traj = Trajectory(
             t=jnp.array([0.0, 1.0]),
@@ -222,7 +222,7 @@ class TestEnergyConservationDiagnostic:
 
     def test_diagnostics_without_energy(self) -> None:
         """diagnostics should remain useful when energy is not tracked."""
-        from neurosim.state import Trajectory
+        from jaxphys.state import Trajectory
 
         traj = Trajectory(
             t=jnp.array([0.0, 1.0, 2.0]),
@@ -238,7 +238,7 @@ class TestEnergyConservationDiagnostic:
 
     def test_diagnostics_exact_energy_summary(self) -> None:
         """diagnostics should report exact summary values for known energies."""
-        from neurosim.state import Trajectory
+        from jaxphys.state import Trajectory
 
         traj = Trajectory(
             t=jnp.array([0.0, 0.5, 1.0]),
@@ -258,7 +258,7 @@ class TestEnergyConservationDiagnostic:
         assert diagnostics["max_energy_drift"] == pytest.approx(1.5)
 
     def test_conservation_report(self) -> None:
-        from neurosim.state import Trajectory
+        from jaxphys.state import Trajectory
 
         traj = Trajectory(
             t=jnp.array([0.0, 1.0]),
@@ -276,7 +276,7 @@ class TestEnergyConservationDiagnostic:
         assert failed["passed"] is False
 
     def test_conservation_report_without_energy_is_not_passed(self) -> None:
-        from neurosim.state import Trajectory
+        from jaxphys.state import Trajectory
 
         traj = Trajectory(
             t=jnp.array([0.0, 1.0]),
@@ -291,7 +291,7 @@ class TestEnergyConservationDiagnostic:
         assert report["max_energy_drift"] == 0.0
 
     def test_conservation_report_empty_energy_is_not_passed(self) -> None:
-        from neurosim.state import Trajectory
+        from jaxphys.state import Trajectory
 
         traj = Trajectory(
             t=jnp.array([0.0]),
@@ -308,7 +308,7 @@ class TestEnergyConservationDiagnostic:
         assert traj.max_energy_drift() == 0.0
 
     def test_conservation_report_single_energy_sample_passes(self) -> None:
-        from neurosim.state import Trajectory
+        from jaxphys.state import Trajectory
 
         traj = Trajectory(
             t=jnp.array([0.0]),

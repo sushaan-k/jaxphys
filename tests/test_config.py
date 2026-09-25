@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from neurosim.config import (
+from jaxphys.config import (
     EMConfig,
     IsingConfig,
     NBodyConfig,

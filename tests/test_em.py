@@ -4,10 +4,10 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from neurosim.em.charges import ChargeSystem, PointCharge
-from neurosim.em.fdtd import EMGrid, PlaneWave, Wall
-from neurosim.em.waveguides import RectangularWaveguide
-from neurosim.exceptions import ConfigurationError, PhysicsError
+from jaxphys.em.charges import ChargeSystem, PointCharge
+from jaxphys.em.fdtd import EMGrid, PlaneWave, Wall
+from jaxphys.em.waveguides import RectangularWaveguide
+from jaxphys.exceptions import ConfigurationError, PhysicsError
 
 jax.config.update("jax_enable_x64", True)
 

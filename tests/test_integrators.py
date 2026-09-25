@@ -8,7 +8,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from neurosim.classical.integrators import (
+from jaxphys.classical.integrators import (
     adaptive_rk45,
     euler,
     get_integrator,

@@ -4,15 +4,15 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from neurosim.exceptions import ConfigurationError
-from neurosim.statmech.boltzmann import (
+from jaxphys.exceptions import ConfigurationError
+from jaxphys.statmech.boltzmann import (
     boltzmann_distribution,
     entropy,
     free_energy,
     mean_energy,
     partition_function,
 )
-from neurosim.statmech.ising import IsingLattice, sweep_temperatures
+from jaxphys.statmech.ising import IsingLattice, sweep_temperatures
 
 jax.config.update("jax_enable_x64", True)
 
