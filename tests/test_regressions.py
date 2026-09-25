@@ -119,6 +119,30 @@ def test_nbody_rejects_invalid_step_counts() -> None:
         body.simulate(n_steps=0)
 
 
+def test_systems_can_be_constructed_inside_jit_and_vmap() -> None:
+    # The constructors validated masses / inertia with a traced comparison,
+    # which raised TracerBoolConversionError inside jax.jit.
+    pos = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+
+    def final_positions(vel: jax.Array) -> jax.Array:
+        body = jp.NBody([1.0, 1e-3], pos, vel, softening=0.01)
+        return body.simulate((0.0, 0.1), n_steps=10, save_every=5).positions[-1]
+
+    vels = jnp.zeros((3, 2, 3)).at[:, 1, 1].set(jnp.array([0.5, 1.0, 1.5]))
+    batched = jax.jit(jax.vmap(final_positions))(vels)
+    np.testing.assert_allclose(batched[1], final_positions(vels[1]), rtol=1e-12)
+
+    def spin(inertia: jax.Array) -> jax.Array:
+        return jp.RigidBody(inertia).simulate([1.0, 0.1, 0.0], (0.0, 0.1), 0.01).p[-1]
+
+    inertia = jnp.array([1.0, 2.0, 3.0])
+    np.testing.assert_allclose(jax.jit(spin)(inertia), spin(inertia), rtol=1e-12)
+    with pytest.raises(ConfigurationError):
+        jp.NBody([1.0, -1.0], pos, np.zeros((2, 3)))
+    with pytest.raises(ConfigurationError):
+        jp.RigidBody([1.0, 0.0, 2.0])
+
+
 # ---------------------------------------------------------------------- EM
 
 

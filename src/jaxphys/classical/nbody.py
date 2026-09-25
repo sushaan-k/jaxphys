@@ -22,9 +22,10 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
 
-from jaxphys._rollout import is_traced, strided_rollout
+from jaxphys._rollout import any_traced, is_traced, strided_rollout
 from jaxphys.config import NBodyConfig
 from jaxphys.exceptions import (
     ConfigurationError,
@@ -81,7 +82,9 @@ class NBody:
             raise ConfigurationError(
                 f"velocities shape {self._velocities.shape} != expected ({n}, 3)"
             )
-        if jnp.any(self._masses <= 0):
+        # Checked on the host copy of concrete inputs, so the constructor also
+        # runs inside jax.jit / jax.vmap (traced values are not checked).
+        if not any_traced(masses) and np.any(np.asarray(masses) <= 0):
             raise ConfigurationError("All masses must be positive")
 
     @property

@@ -24,9 +24,10 @@ from typing import Any, cast
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
 
-from jaxphys._rollout import call_with_params, strided_rollout
+from jaxphys._rollout import any_traced, call_with_params, strided_rollout
 from jaxphys.exceptions import ConfigurationError
 from jaxphys.state import Trajectory
 
@@ -62,7 +63,9 @@ class RigidBody:
             raise ConfigurationError(
                 f"inertia must have shape (3,), got {self._inertia.shape}"
             )
-        if jnp.any(self._inertia <= 0):
+        # Checked on the host copy of concrete inputs, so the constructor also
+        # runs inside jax.jit / jax.vmap (traced values are not checked).
+        if not any_traced(inertia) and np.any(np.asarray(inertia) <= 0):
             raise ConfigurationError(
                 "All principal moments of inertia must be positive"
             )

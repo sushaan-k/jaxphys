@@ -61,6 +61,11 @@ def is_traced(x: Any) -> bool:
     return isinstance(x, jax.core.Tracer)
 
 
+def any_traced(tree: Any) -> bool:
+    """True when any leaf of ``tree`` is a tracer (see :func:`is_traced`)."""
+    return any(is_traced(leaf) for leaf in jax.tree_util.tree_leaves(tree))
+
+
 def is_array_tree(tree: Any) -> bool:
     """True when every leaf of ``tree`` can be passed as a traced jit argument."""
     return all(
