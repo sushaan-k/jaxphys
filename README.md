@@ -13,9 +13,12 @@
 
 ## At a Glance
 
-- Classical, EM, quantum, optics, and statistical mechanics modules
+- Classical, EM, quantum, fluids, optics, and statistical mechanics modules
 - JAX-native autodiff and JIT compilation throughout the simulation stack
-- Long-horizon integrators, FDTD fields, wave mechanics, and Ising simulation
+- Symplectic integrators, FDTD/FDFD fields, wave mechanics, SPH and
+  finite-volume fluids, tight-binding bands, and Ising Monte Carlo
+- Physics tests check solvers against analytic or independent results (Sod shock tube,
+  free-space Green's function, Poiseuille flow, PML reflection, exact Ising enumeration)
 - Examples, notebooks, and visualization tools for research and teaching
 
 ## The Problem
@@ -29,36 +32,52 @@ There's a massive gap for a **modern, GPU-accelerated, differentiable physics li
 
 ## The Solution
 
-`jaxphys` is a JAX-based differentiable physics engine covering **classical mechanics, electromagnetism, quantum mechanics, and statistical mechanics** with GPU acceleration and automatic differentiation built in.
+`jaxphys` is a JAX-based differentiable physics engine covering **classical mechanics, electromagnetism, quantum mechanics, fluids, optics, and statistical mechanics** with GPU acceleration and automatic differentiation built in.
 
 **Key features:**
 - Define a Lagrangian, get equations of motion automatically via JAX autodiff
-- Symplectic integrators that conserve energy over millions of timesteps
-- Full FDTD Maxwell solver with PML absorbing boundaries
-- Split-operator Schrödinger equation solver (exactly unitary)
-- GPU-accelerated Ising model Monte Carlo with Metropolis and Wolff cluster updates
-- Gradient-based inverse problems — optimize through entire simulations
+- Symplectic integrators whose energy error stays bounded over long runs
+- FDTD Maxwell solvers (2D and 3D) with split-field PML absorbing boundaries, and a differentiable FDFD solver for inverse design
+- Split-operator Schrödinger solvers in 1D and 2D (exactly unitary)
+- SPH, compressible Euler, lattice Boltzmann and vorticity-streamfunction fluid solvers
+- Tight-binding band structures with gradients with respect to the hoppings
+- Ising model Monte Carlo with checkerboard Metropolis and Wolff cluster updates, vectorized over temperatures
+- Simulations run under `jax.jit`, `jax.vmap` and `jax.grad`: optimize through entire trajectories
 - Vectorized parameter sweeps for coarse search before local optimization
 
 ## Benchmarks
 
-| Simulation | NumPy | PyTorch | **jaxphys (JIT)** |
+| Simulation | NumPy | jaxphys (JIT) | Speedup |
 |---|---|---|---|
-| N-body (N=1000, 1000 steps) | 4.2s | 0.8s | **0.04s** |
-| Schrödinger 2D (256×256, 500 steps) | 11.3s | 2.1s | **0.09s** |
-| SPH fluid (5000 particles, 1000 steps) | 18.7s | 3.4s | **0.18s** |
-| FDTD EM (128³, 1000 steps) | 24.1s | 5.8s | **0.31s** |
+| N-body, velocity Verlet (N=1000, 200 steps) | 13.97 s | 4.95 s | 2.8x |
+| Schrödinger 2D, split-operator (256×256, 500 steps) | 1.34 s | 0.98 s | 1.4x |
+| SPH, weakly compressible (4096 particles, 200 steps) | 2.59 s | 5.29 s | 0.5x |
+| FDTD 3D Yee + split-field PML (64³, 200 steps) | 6.72 s | 1.74 s | 3.9x |
 
-*Benchmarks on NVIDIA A100 40GB. NumPy/PyTorch baselines use hand-tuned reference implementations. Reproduce with `python examples/bench.py`.*
+*Measured on CPU only: a cloud container with 4 logical cores of an Intel
+Xeon @ 2.80GHz (jax 0.10.2, NumPy 2.4.6, float64), shared with other jobs, so
+expect some run-to-run variation. No GPU numbers have been measured. The
+NumPy columns are straightforward vectorized implementations of the same
+schemes (the SPH baseline finds neighbours with SciPy's compiled `cKDTree`,
+which is why it wins on CPU); every row asserts that both final states
+agree before timing. JAX times exclude the first (compiling) call and use
+`block_until_ready()`. Reproduce with `python examples/bench.py`
+(`--quick` for a fast smoke run).*
 
 ## Supported Domains
 
 | Domain | Solvers | Differentiable | GPU |
 |---|---|---|---|
-| Classical mechanics | Symplectic Euler, RK4, Verlet | ✅ | ✅ |
-| Quantum | Split-operator Schrödinger, tight-binding | ✅ | ✅ |
-| Electromagnetism | FDTD w/ PML, FDFD | ✅ | ✅ |
-| Fluid dynamics | SPH, compressible Euler | ✅ | ✅ |
+| Classical mechanics | Lagrangian/Hamiltonian systems with symplectic Euler, leapfrog (Störmer-Verlet), Yoshida-4, RK4, Euler; velocity-Verlet N-body; rigid bodies; adaptive RK45 stepper | ✅ | ✅ |
+| Quantum | Split-operator Schrödinger (1D, 2D), finite-difference eigenstates, tight-binding bands, Heisenberg spin chains (exact diagonalization), Lindblad master equation | ✅ | ✅ |
+| Electromagnetism | FDTD (2D TM, 3D) with split-field PML, FDFD (2D TM) with stretched-coordinate PML, Boris-pushed charges, rectangular waveguide modes | ✅ | ✅ |
+| Fluid dynamics | Weakly compressible SPH, compressible Euler (1D MUSCL-HLLC), lattice Boltzmann (D2Q9), vorticity-streamfunction Navier-Stokes | ✅ | ✅ |
+| Statistical mechanics | Ising Metropolis (checkerboard) and Wolff cluster Monte Carlo, Boltzmann statistics | Boltzmann only (Monte Carlo sampling is not differentiable) | ✅ |
+| Optics | ABCD ray tracing, Fraunhofer diffraction | ✅ | ✅ |
+
+"GPU" means the solver is pure JAX and runs on any JAX backend; the
+benchmarks above were measured on CPU only. `adaptive_rk45` and the
+plotting helpers run on the host.
 
 ## Quick Start
 
@@ -104,6 +123,7 @@ print(f"Energy drift: {trajectory.energy_drift():.2e}")
 ```python
 import jax
 import jax.numpy as jnp
+import jaxphys as jp
 
 # Find initial velocity to land a projectile at x=100
 def miss_distance(v0):
@@ -116,7 +136,7 @@ print(f"Range sensitivity: {d_range_dv0:.4f}")
 
 # Optimize through entire trajectory
 result = jp.optimize(miss_distance, initial_guess=10.0, learning_rate=0.001)
-print(f"Optimal v0: {result.x:.4f}")  # ~31.0 m/s
+print(f"Optimal v0: {result.x:.4f}")  # sqrt(100 * 9.81) = 31.32 m/s
 
 # Coarse scan launch speed and angle before local refinement
 grid = jp.make_parameter_grid(
@@ -149,6 +169,8 @@ print(refined.best_parameters, refined.best_score)
 ### Quantum Tunneling
 
 ```python
+import jaxphys as jp
+
 barrier = jp.SquareBarrier(height=5.0, width=1.0, center=10.0)
 psi0 = jp.GaussianWavepacket(x0=5.0, k0=3.0, sigma=0.5)
 
@@ -158,6 +180,34 @@ result = jp.solve_schrodinger(
 )
 
 print(f"Transmission coefficient: {result.transmission_coefficient:.4f}")
+```
+
+### Waves, Bands and Fluids
+
+```python
+import jax
+import jax.numpy as jnp
+import jaxphys as jp
+
+# Graphene bands: the Dirac point at the zone corner K has zero energy.
+graphene = jp.TightBinding.honeycomb(t=2.7)
+b1, b2 = graphene.reciprocal_vectors
+print(graphene.bands((2 * b1 + b2) / 3))  # ~[[0, 0]]
+
+# FDFD: field of a line current, differentiable w.r.t. the permittivity map.
+eps = jnp.ones((80, 80))
+current = jnp.zeros((80, 80)).at[40, 40].set(1.0)
+probe = lambda e: jnp.abs(jp.solve_fdfd(e, current, 3e9, 5e-3).ez[60, 40]) ** 2
+sensitivity_map = jax.grad(probe)(eps)  # d|Ez|^2 / d eps_r at every cell
+
+# Sod shock tube with the compressible Euler solver.
+x = (jnp.arange(400) + 0.5) / 400
+left = x < 0.5
+sod = jp.solve_euler_1d(
+    jnp.where(left, 1.0, 0.125), jnp.zeros(400), jnp.where(left, 1.0, 0.1),
+    dx=1 / 400, t_end=0.2,
+)
+print(f"Post-shock density: {float(sod.rho[-1, 300]):.3f}")  # exact: 0.266
 ```
 
 ## Architecture
@@ -170,6 +220,7 @@ graph TD
     A --> E[Statistical Mechanics]
     A --> F[Optics]
     A --> G[Optimization]
+    A --> I[Fluids]
 
     B --> B1[Lagrangian Engine]
     B --> B2[Hamiltonian Engine]
@@ -177,14 +228,21 @@ graph TD
     B --> B4[Rigid Body Dynamics]
     B --> B5[Symplectic Integrators]
 
-    C --> C1[FDTD Maxwell Solver]
+    C --> C1[FDTD Maxwell Solver 2D/3D]
+    C --> C4[FDFD Solver]
     C --> C2[Charge Dynamics]
     C --> C3[Waveguide Analysis]
 
-    D --> D1[Schrodinger Solver]
+    D --> D1[Schrodinger Solver 1D/2D]
     D --> D2[Eigenvalue Problems]
+    D --> D5[Tight-Binding Bands]
     D --> D3[Spin Chains]
     D --> D4[Density Matrices]
+
+    I --> I1[Lattice Boltzmann]
+    I --> I2[Vorticity-Streamfunction NS]
+    I --> I3[SPH]
+    I --> I4[Compressible Euler]
 
     E --> E1[Ising Model]
     E --> E2[Monte Carlo Methods]
@@ -202,6 +260,7 @@ graph TD
     C1 -.-> H
     D1 -.-> H
     E1 -.-> H
+    I3 -.-> H
 ```
 
 ## API Reference
@@ -211,8 +270,9 @@ graph TD
 | Module | Description | Key Classes |
 |--------|-------------|-------------|
 | `jaxphys.classical` | Lagrangian/Hamiltonian mechanics, N-body, rigid body | `LagrangianSystem`, `HamiltonianSystem`, `NBody`, `RigidBody` |
-| `jaxphys.em` | FDTD Maxwell solver, charge dynamics, waveguides | `EMGrid`, `ChargeSystem`, `RectangularWaveguide` |
-| `jaxphys.quantum` | Schrödinger equation, spin chains, density matrices | `solve_schrodinger`, `SpinChain`, `DensityMatrix` |
+| `jaxphys.em` | FDTD and FDFD Maxwell solvers, charge dynamics, waveguides | `EMGrid`, `EMGrid3D`, `solve_fdfd`, `ChargeSystem`, `RectangularWaveguide` |
+| `jaxphys.quantum` | Schrödinger equation (1D/2D), eigenstates, tight-binding, spin chains, density matrices | `solve_schrodinger`, `solve_schrodinger_2d`, `TightBinding`, `SpinChain`, `DensityMatrix` |
+| `jaxphys.fluids` | Lattice Boltzmann, vorticity-streamfunction NS, SPH, compressible Euler | `LBMGrid`, `NavierStokesSolver`, `SPHFluid`, `solve_euler_1d` |
 | `jaxphys.statmech` | Ising model, Monte Carlo, Boltzmann statistics | `IsingLattice`, `boltzmann_distribution` |
 | `jaxphys.optics` | Geometric ray tracing, Fraunhofer diffraction | `ThinLens`, `single_slit`, `double_slit` |
 | `jaxphys.optimize` | Inverse problems, gradient-based optimization, grid search | `optimize`, `sensitivity`, `parameter_sweep`, `refine_parameter_sweep` |
@@ -225,10 +285,15 @@ graph TD
 | `euler` | 1st | No | Baseline only |
 | `symplectic_euler` | 1st | Yes | Quick prototyping |
 | `leapfrog` | 2nd | Yes | General Hamiltonian systems |
-| `velocity_verlet` | 2nd | Yes | N-body problems |
+| `velocity_verlet` | 2nd | Yes | N-body problems (takes an acceleration function; used by `NBody`) |
 | `yoshida4` | 4th | Yes | High-accuracy long-time integration |
-| `rk4` | 4th | No | Non-Hamiltonian or short-time |
+| `rk4` | 4th | No | Non-Hamiltonian or short-time; the default for `LagrangianSystem` |
 | `stormer_verlet` | 2nd | Yes | Alias for leapfrog |
+| `adaptive_rk45` | 5(4) | No | One error-controlled step at a time from a Python loop (not usable in `simulate`) |
+
+The symplectic integrators assume separable Hamilton equations, so
+`LagrangianSystem.simulate` accepts `euler` and `rk4` only; use a
+`HamiltonianSystem` for symplectic integration.
 
 ## The Differentiable Advantage
 
@@ -247,8 +312,11 @@ See the `examples/` directory:
 - `three_body.py` — Sun-Jupiter-Earth gravitational system
 - `quantum_tunneling.py` — Wavepacket tunneling through a barrier with transmission coefficients
 - `em_diffraction.py` — FDTD slit diffraction with an EM source and screen
+- `em_dipole_3d.py` — 3D FDTD dipole radiation into a PML-terminated box
 - `ising_phase_transition.py` — Temperature sweep across the 2D Ising critical point
+- `karman_vortex_street.py` — Lattice Boltzmann flow past a cylinder
 - `spacecraft_trajectory.py` — Differentiable launch targeting on a lunar-gravity profile
+- `bench.py` — The benchmark table above, checked against NumPy references
 
 Run the offline walkthrough with:
 
@@ -270,8 +338,8 @@ pip install -e ".[all]"
 pytest tests/ -v
 
 # Lint
-ruff check src/
-ruff format src/
+ruff check src tests examples
+ruff format src tests examples
 
 # Type check
 mypy src/jaxphys/
@@ -279,10 +347,11 @@ mypy src/jaxphys/
 
 ## Performance Notes
 
-- All simulation loops use `jax.lax.scan` for compiled execution (no Python loop overhead)
-- Force computations are vectorized with `jnp.einsum` for GPU throughput
-- JIT compilation: first call compiles, subsequent calls run at full speed
-- For GPU: install `jaxlib` with CUDA support: `pip install jax[cuda12]`
+- Every simulation loop is one compiled `jax.lax.scan`; only the saved snapshots are stored, and reverse-mode gradients recompute the steps between them instead of storing every step
+- JIT compilation: the first call compiles, later calls with the same shapes reuse the compiled loop
+- Pairwise forces are vectorized with `jnp.einsum`; SPH uses a cell list, so its cost grows linearly with the particle count
+- Ising temperature sweeps run as one `jax.vmap`-ed batch of chains
+- For GPU: install JAX with CUDA support, e.g. `pip install -U "jax[cuda12]"`
 
 ## Research References
 

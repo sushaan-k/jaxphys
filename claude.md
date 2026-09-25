@@ -59,7 +59,7 @@ JAX made differentiable programming accessible. Nobody has built a serious physi
 │  │  - Automatic differentiation (jax.grad)          │  │
 │  │  - GPU/TPU acceleration (jax.jit)                │  │
 │  │  - Vectorized simulation (jax.vmap)              │  │
-│  │  - Parallel parameter sweeps (jax.pmap)          │  │
+│  │  - Vectorized parameter sweeps (jax.vmap)        │  │
 │  └─────────────────────────────────────────────────┘  │
 │                          │                             │
 │                          ▼                             │
@@ -209,7 +209,10 @@ def miss_distance(v0):
 optimal_v0 = jp.optimize(miss_distance, initial_guess=10.0)
 
 # Parameter sensitivity: how does changing mass affect the double pendulum?
-sensitivity = jax.jacobian(system.simulate)(params)
+# (Params is a pytree: the result holds d q(T) / d field for every field)
+sensitivity = jax.jacobian(
+    lambda p: system.simulate([0.3, 0.2], [0.0, 0.0], (0, 5), 0.001, p).q[-1]
+)(params)
 ```
 
 This enables:
@@ -228,7 +231,7 @@ This enables:
 ### What Makes This Novel
 
 1. **Differentiable physics** — not just simulation, but gradients through the simulation (inverse problems, optimization)
-2. **GPU-accelerated** — 1000x speedup over CPU for large systems (N-body, FDTD, Monte Carlo)
+2. **Accelerator-ready** — pure-JAX solvers run unchanged on CPU, GPU or TPU (measured CPU numbers: `examples/bench.py`)
 3. **USAPhO-level problems as code** — your physics competition background expressed as engineering
 4. **Lagrangian mechanics from first principles** — define L, get equations of motion automatically
 5. **Cross-domain** — classical, E&M, quantum, stat mech in one library with a unified API
