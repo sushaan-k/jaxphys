@@ -338,6 +338,35 @@ class QuantumResult:
 
 
 @dataclass(frozen=True)
+class QuantumResult2D:
+    """Result of a 2D time-dependent Schrodinger simulation.
+
+    Attributes:
+        t: Time values, shape (n_saved,).
+        psi: Wavefunction history, shape (n_saved, nx, ny).
+        x: x grid, shape (nx,).
+        y: y grid, shape (ny,).
+        potential: Potential on the grid, shape (nx, ny).
+    """
+
+    t: Array
+    psi: Array
+    x: Array
+    y: Array
+    potential: Array
+
+    @property
+    def probability(self) -> Array:
+        """Probability density |psi|^2 at each saved time."""
+        return jnp.abs(self.psi) ** 2
+
+    @property
+    def n_steps(self) -> int:
+        """Number of saved time steps."""
+        return int(self.t.shape[0])
+
+
+@dataclass(frozen=True)
 class FluidState:
     """State of a fluid simulation on a 2D grid.
 
@@ -455,6 +484,7 @@ _register_pytrees(
     EMFieldHistory3D,
     QuantumState,
     QuantumResult,
+    QuantumResult2D,
     FluidState,
     FluidHistory,
     IsingResult,

@@ -21,6 +21,7 @@ References:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from typing import cast
@@ -31,7 +32,7 @@ from jax import Array
 
 from jaxphys._rollout import is_traced, strided_rollout
 from jaxphys.exceptions import ConfigurationError
-from jaxphys.state import QuantumResult
+from jaxphys.state import QuantumResult, QuantumResult2D
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,121 @@ def solve_schrodinger(
         x=x,
         potential=V,
         transmission_coefficient=transmission,
+    )
+
+
+@dataclass(frozen=True)
+class GaussianWavepacket2D:
+    """Isotropic 2D Gaussian wavepacket initial condition.
+
+    psi(x, y) = (2*pi*sigma^2)^{-1/2}
+                * exp(-((x-x0)^2 + (y-y0)^2) / (4*sigma^2))
+                * exp(i*(kx*x + ky*y))
+
+    Attributes:
+        x0: Center x position.
+        y0: Center y position.
+        kx: Central wavenumber along x.
+        ky: Central wavenumber along y.
+        sigma: Position standard deviation along each axis.
+    """
+
+    x0: float
+    y0: float
+    kx: float
+    ky: float
+    sigma: float
+
+    def __call__(self, x: Array, y: Array) -> Array:
+        """Evaluate the wavepacket on (broadcastable) coordinates x, y."""
+        r2 = (x - self.x0) ** 2 + (y - self.y0) ** 2
+        norm = (2.0 * jnp.pi * self.sigma**2) ** (-0.5)
+        phase = jnp.exp(1j * (self.kx * x + self.ky * y))
+        return cast(Array, norm * jnp.exp(-r2 / (4.0 * self.sigma**2)) * phase)
+
+
+def solve_schrodinger_2d(
+    psi0: Callable[[Array, Array], Array] | Array,
+    potential: Callable[[Array, Array], Array] | Array,
+    x_range: tuple[float, float] = (-10.0, 10.0),
+    y_range: tuple[float, float] = (-10.0, 10.0),
+    n_points: tuple[int, int] = (128, 128),
+    t_span: tuple[float, float] = (0.0, 1.0),
+    dt: float = 0.01,
+    hbar: float = 1.0,
+    mass: float = 1.0,
+    save_every: int = 10,
+) -> QuantumResult2D:
+    """Solve the 2D time-dependent Schrodinger equation.
+
+    Same Strang split-operator scheme as :func:`solve_schrodinger`, with a
+    2D FFT for the kinetic step: second order in ``dt``, spectrally accurate
+    in space and exactly unitary. The domain is periodic in both directions
+    (``x`` samples ``[x_min, x_max)``, likewise ``y``). The whole propagation
+    is one compiled loop, so it runs under ``jax.jit`` and is differentiable
+    with respect to array-valued ``psi0`` and ``potential``.
+
+    Args:
+        psi0: Initial wavefunction: a callable ``psi0(X, Y)`` evaluated on
+            the ``indexing="ij"`` meshgrid, or an array of shape ``n_points``.
+            It is normalized to unit probability.
+        potential: ``V(X, Y)`` callable or array of shape ``n_points``.
+        x_range: Domain ``(x_min, x_max)``.
+        y_range: Domain ``(y_min, y_max)``.
+        n_points: Grid size ``(nx, ny)``.
+        t_span: Time interval.
+        dt: Time step.
+        hbar: Reduced Planck constant.
+        mass: Particle mass.
+        save_every: Save the wavefunction every N steps.
+
+    Returns:
+        QuantumResult2D with ``psi`` of shape ``(n_saved, nx, ny)`` at
+        ``t_start + k*save_every*dt``.
+
+    Raises:
+        ConfigurationError: If the domain, time step or shapes are invalid.
+    """
+    (x_min, x_max), (y_min, y_max) = x_range, y_range
+    if x_max <= x_min or y_max <= y_min:
+        raise ConfigurationError(f"Invalid domain x={x_range}, y={y_range}")
+    if dt <= 0:
+        raise ConfigurationError(f"dt must be positive, got {dt}")
+    if save_every < 1:
+        raise ConfigurationError(f"save_every must be >= 1, got {save_every}")
+    nx, ny = n_points
+    t_start, t_end = t_span
+    n_steps = int((t_end - t_start) / dt)
+
+    x = jnp.linspace(x_min, x_max, nx, endpoint=False)
+    y = jnp.linspace(y_min, y_max, ny, endpoint=False)
+    dx, dy = (x_max - x_min) / nx, (y_max - y_min) / ny
+    X, Y = jnp.meshgrid(x, y, indexing="ij")
+    kx = 2.0 * jnp.pi * jnp.fft.fftfreq(nx, d=dx)
+    ky = 2.0 * jnp.pi * jnp.fft.fftfreq(ny, d=dy)
+    k2 = kx[:, None] ** 2 + ky[None, :] ** 2
+
+    V = jnp.asarray(potential(X, Y) if callable(potential) else potential)
+    psi = jnp.asarray(psi0(X, Y) if callable(psi0) else psi0, dtype=jnp.complex128)
+    for name, arr in (("psi0", psi), ("potential", V)):
+        if arr.shape != (nx, ny):
+            raise ConfigurationError(
+                f"{name} must have shape {(nx, ny)}, got {arr.shape}"
+            )
+    psi = psi / jnp.sqrt(jnp.sum(jnp.abs(psi) ** 2) * dx * dy)
+
+    logger.info(
+        "Starting 2D Schrodinger solver: grid=%dx%d, n_steps=%d", nx, ny, n_steps
+    )
+    psi_history = _split_operator_rollout(
+        psi, V, k2, dt, hbar, mass, n_steps=n_steps, save_every=save_every
+    )
+    return QuantumResult2D(
+        t=t_start + dt * jnp.arange(0, n_steps + 1, save_every),
+        psi=psi_history,
+        x=x,
+        y=y,
+        potential=V,
     )
 
 

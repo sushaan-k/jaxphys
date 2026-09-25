@@ -60,6 +60,7 @@ from jaxphys.config import (
     SimulationConfig,
 )
 from jaxphys.em.charges import ChargeSystem, PointCharge
+from jaxphys.em.fdfd import FDFDResult, solve_fdfd
 
 # Electromagnetism
 from jaxphys.em.fdtd import EMGrid, PlaneWave, Wall
@@ -79,8 +80,10 @@ from jaxphys.exceptions import (
 )
 
 # Fluid dynamics
+from jaxphys.fluids.euler import EulerResult, solve_euler_1d
 from jaxphys.fluids.lbm import D2Q9, LBMGrid, Obstacle
 from jaxphys.fluids.navier_stokes import NavierStokesSolver
+from jaxphys.fluids.sph import SPHFluid, SPHTrajectory
 from jaxphys.optics.diffraction import (
     circular_aperture,
     double_slit,
@@ -115,12 +118,15 @@ from jaxphys.quantum.density_matrix import DensityMatrix, lindblad_evolve
 from jaxphys.quantum.schrodinger import (
     DoubleWellPotential,
     GaussianWavepacket,
+    GaussianWavepacket2D,
     HarmonicPotential,
     SquareBarrier,
     solve_schrodinger,
+    solve_schrodinger_2d,
 )
 from jaxphys.quantum.spin import SpinChain
 from jaxphys.quantum.stationary import solve_eigenvalue_problem
+from jaxphys.quantum.tight_binding import TightBinding, k_path
 
 # State representations
 from jaxphys.state import (
@@ -134,6 +140,7 @@ from jaxphys.state import (
     NBodyTrajectory,
     PhaseState,
     QuantumResult,
+    QuantumResult2D,
     QuantumState,
     Trajectory,
 )
@@ -189,6 +196,7 @@ __all__ = [
     "FluidHistory",
     "QuantumState",
     "QuantumResult",
+    "QuantumResult2D",
     "IsingResult",
     # Exceptions
     "JaxphysError",
@@ -221,6 +229,8 @@ __all__ = [
     "EMGrid3D",
     "PointSource3D",
     "DielectricRegion",
+    "solve_fdfd",
+    "FDFDResult",
     "PointCharge",
     "ChargeSystem",
     "RectangularWaveguide",
@@ -229,14 +239,22 @@ __all__ = [
     "LBMGrid",
     "Obstacle",
     "NavierStokesSolver",
+    "SPHFluid",
+    "SPHTrajectory",
+    "solve_euler_1d",
+    "EulerResult",
     # Quantum
     "solve_schrodinger",
+    "solve_schrodinger_2d",
     "GaussianWavepacket",
+    "GaussianWavepacket2D",
     "SquareBarrier",
     "HarmonicPotential",
     "DoubleWellPotential",
     "solve_eigenvalue_problem",
     "SpinChain",
+    "TightBinding",
+    "k_path",
     "DensityMatrix",
     "lindblad_evolve",
     # StatMech
