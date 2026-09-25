@@ -22,7 +22,10 @@ def main() -> None:
     lunar_gravity = 1.62
 
     def objective(v0: float | jnp.ndarray) -> jnp.ndarray:
-        return (jp.projectile(v0=v0, angle=launch_angle, g=lunar_gravity).range - target_range) ** 2
+        return (
+            jp.projectile(v0=v0, angle=launch_angle, g=lunar_gravity).range
+            - target_range
+        ) ** 2
 
     result = jp.optimize(
         objective,
@@ -44,8 +47,15 @@ def main() -> None:
     print(f"Converged: {result.converged} after {result.n_iterations} iterations")
 
     speeds = jnp.linspace(float(result.x) * 0.75, float(result.x) * 1.25, 50)
-    ranges = jnp.array([float(jp.projectile(v0=s, angle=launch_angle, g=lunar_gravity).range) for s in speeds])
-    print(f"Range sweep span: {float(ranges.min()):.1f} m .. {float(ranges.max()):.1f} m")
+    ranges = jnp.array(
+        [
+            float(jp.projectile(v0=s, angle=launch_angle, g=lunar_gravity).range)
+            for s in speeds
+        ]
+    )
+    print(
+        f"Range sweep span: {float(ranges.min()):.1f} m .. {float(ranges.max()):.1f} m"
+    )
 
 
 if __name__ == "__main__":

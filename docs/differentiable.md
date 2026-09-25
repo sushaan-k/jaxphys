@@ -11,14 +11,24 @@ gradient-based workflows. The important distinction is between:
 
 These parts of the library are intended for automatic differentiation:
 
-- `jaxphys.classical` systems built from smooth equations of motion
-- `jaxphys.optimize.optimize`
-- `jaxphys.optimize.sensitivity`
-- `jaxphys.optimize.parameter_sweep`
-- `jaxphys.optimize.refine_parameter_sweep`
-- `jaxphys.quantum.solve_schrodinger`
-- `jaxphys.quantum.solve_eigenvalue_problem`
+- `jaxphys.classical` systems built from smooth equations of motion.
+  `Params` is a pytree, so `jax.grad` can differentiate a trajectory with
+  respect to its fields, and `simulate()` also works under `jax.jit` and
+  `jax.vmap`.
+- `jaxphys.optimize.optimize`, `sensitivity`, `parameter_sweep` and
+  `refine_parameter_sweep`
+- `jaxphys.quantum.solve_schrodinger`, `solve_schrodinger_2d`,
+  `solve_eigenvalue_problem`, `lindblad_evolve` and `TightBinding` bands
+  (the model is a pytree, so gradients with respect to hoppings work)
+- `jaxphys.em.solve_fdfd` with respect to the permittivity map and the
+  source (inverse design)
+- `jaxphys.fluids.SPHFluid.simulate` (initial state) and
+  `solve_euler_1d` (initial state; pass `dt` explicitly under a
+  transformation)
 - `jaxphys.optics` routines that map parameters to smooth field values
+
+Long rollouts save memory in reverse mode: every solver keeps only its
+saved snapshots and recomputes the steps between them (checkpointing).
 
 ## Typical Pattern
 

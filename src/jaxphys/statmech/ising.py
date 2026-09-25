@@ -375,11 +375,10 @@ def vmap_temperatures(
     algorithm: str = "metropolis",
     key: Array | None = None,
 ) -> IsingResult:
-    """Deprecated: use ``sweep_temperatures`` instead.
+    """Deprecated alias of :func:`sweep_temperatures`.
 
-    This function was misleadingly named -- it uses a sequential
-    Python for-loop, not ``jax.vmap``.  It is kept as an alias for
-    backwards compatibility but will be removed in a future release.
+    Kept for backwards compatibility; it will be removed in a future
+    release.
     """
     import warnings
 

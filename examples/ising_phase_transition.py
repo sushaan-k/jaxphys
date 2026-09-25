@@ -45,11 +45,7 @@ def main() -> None:
         result.susceptibilities,
         strict=True,
     ):
-        print(
-            f"T={float(temp):.3f}  "
-            f"|m|={float(mag):.3f}  "
-            f"chi={float(susc):.3f}"
-        )
+        print(f"T={float(temp):.3f}  |m|={float(mag):.3f}  chi={float(susc):.3f}")
 
     try:
         import matplotlib.pyplot as plt

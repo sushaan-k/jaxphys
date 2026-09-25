@@ -29,8 +29,10 @@ def main() -> None:
     print(f"Wavepacket: x0={psi0.x0}, k0={psi0.k0}, sigma={psi0.sigma}")
     print(f"Incident energy: E = hbar^2 k^2 / (2m) = {0.5 * psi0.k0**2:.2f}")
     print(f"Barrier height: V0 = {barrier.height:.2f}")
-    print(f"E {'>' if 0.5 * psi0.k0**2 > barrier.height else '<'} V0 "
-          f"({'classically allowed' if 0.5 * psi0.k0**2 > barrier.height else 'tunneling regime'})")
+    print(
+        f"E {'>' if 0.5 * psi0.k0**2 > barrier.height else '<'} V0 "
+        f"({'classically allowed' if 0.5 * psi0.k0**2 > barrier.height else 'tunneling regime'})"
+    )
 
     result = jp.solve_schrodinger(
         psi0=psi0,

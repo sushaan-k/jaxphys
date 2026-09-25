@@ -33,9 +33,7 @@ def lagrangian(q: jnp.ndarray, qdot: jnp.ndarray, params: jp.Params) -> jnp.ndar
         + (l2 * omega2) ** 2
         + 2 * l1 * l2 * omega1 * omega2 * jnp.cos(theta1 - theta2)
     )
-    V = -(m1 + m2) * g * l1 * jnp.cos(theta1) - m2 * g * l2 * jnp.cos(
-        theta2
-    )
+    V = -(m1 + m2) * g * l1 * jnp.cos(theta1) - m2 * g * l2 * jnp.cos(theta2)
     return T - V
 
 

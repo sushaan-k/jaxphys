@@ -129,14 +129,15 @@ The difference provides a local error estimate:
 
     err = |y5 - y4|
 
-The step is accepted if the scaled error norm is below 1.  The step
-size is then updated:
+The step is accepted if the scaled error norm is below 1; otherwise it
+is retried with
 
-    h_new = h * safety * err_norm^{-1/5}   (accepted)
-    h_new = h * safety * err_norm^{-1/4}   (rejected)
+    h_new = h * safety * err_norm^{-1/4}
 
-This gives high accuracy with fewer total function evaluations than
-a fixed-step method at the same tolerance.
+`adaptive_rk45` returns one accepted step (of size at most the `dt` it was
+given, reported through the returned time). Its accept/reject loop runs
+on the host, so call it from a Python loop; it cannot drive the compiled
+`simulate()` loops.
 
 ---
 
@@ -155,7 +156,10 @@ where F denotes the Fourier transform and T_k = hbar^2 k^2 / (2m) is
 the kinetic energy in momentum space.
 
 This is second-order accurate in dt and exactly unitary, so
-probability is conserved to machine precision.
+probability is conserved to machine precision. The grid is periodic
+(`x` samples `[x_min, x_max)`), which is what the FFT assumes.
+`solve_schrodinger_2d` applies the same scheme with a 2D FFT and
+`|k|^2 = kx^2 + ky^2`.
 
 ---
 
@@ -176,8 +180,30 @@ The Courant stability condition requires:
 
 where D is the spatial dimension and c = 1/sqrt(eps * mu).
 
-Absorbing boundary conditions use a Perfectly Matched Layer (PML) to
-prevent reflections from the grid edges.
+Absorbing boundaries use Berenger's split-field Perfectly Matched Layer:
+each field component is split into the parts driven by its two curl
+terms, and each part decays with the conductivity along the axis of its
+derivative. With the matched magnetic conductivity sigma* = sigma mu0/eps0
+the layer is reflectionless at the continuum level for every angle of
+incidence. The conductivity is graded as sigma(d) = sigma_max (d/L)^3 with
+sigma_max = 0.8 (m + 1) / (eta0 dx), m = 3, and the layer is backed by
+perfectly conducting walls. Both `EMGrid` (2D TM) and `EMGrid3D` use it;
+the tests compare a PML-terminated grid against a much larger grid and
+require agreement to 5%.
+
+## 5b. FDFD (frequency domain)
+
+For a harmonic source J exp(-i omega t), `solve_fdfd` solves the 2D TM
+Helmholtz equation
+
+    (1/s_x) d/dx (1/s_x) dEz/dx + (1/s_y) d/dy (1/s_y) dEz/dy
+        + k0^2 eps_r Ez = -i omega mu0 Jz
+
+with stretched-coordinate PML factors s = 1 + i sigma / (omega eps0). The
+5-point system is block tridiagonal and is solved exactly by block LU
+elimination (a `lax.scan` of dense solves), so the solve is jit-able,
+vmap-able and differentiable with respect to eps_r. A unit line current
+reproduces the free-space Green's function -(omega mu0 / 4) H0^(1)(k r).
 
 ---
 
@@ -191,6 +217,13 @@ For the Ising model with energy E = -J * sum_{<i,j>} s_i * s_j:
 2. Compute the energy change dE from flipping it.
 3. Accept the flip with probability min(1, exp(-dE / (k_B * T))).
 
+On lattices with even side lengths a sweep updates the two checkerboard
+sublattices in turn: spins of one colour do not interact, so all of them
+can be proposed simultaneously while keeping detailed balance. Odd
+lattices use N random single-site proposals per sweep. The whole chain
+is one compiled loop, and `sweep_temperatures` runs all temperatures as
+independent chains in one `jax.vmap`-ed call.
+
 ### Wolff Cluster Algorithm
 
 Near the critical temperature T_c, single-spin Metropolis suffers
@@ -198,15 +231,66 @@ from critical slowing down.  The Wolff algorithm builds clusters of
 aligned spins and flips them collectively:
 
 1. Pick a random seed spin.
-2. Add each aligned neighbor with probability p = 1 - exp(-2J / (k_B * T)).
-3. Recursively grow the cluster.
+2. Activate every satisfied bond independently with probability
+   p = 1 - exp(-2J / (k_B * T)) (each bond is sampled exactly once).
+3. Grow the cluster of active bonds containing the seed to convergence.
 4. Flip all spins in the cluster.
 
 This dramatically reduces autocorrelation times near T_c.
 
 ---
 
-## 7. Coupled Oscillators and Normal Modes
+## 7. Fluids
+
+### Lattice Boltzmann (D2Q9, BGK)
+
+`LBMGrid` streams and collides nine populations per node with relaxation
+time tau = 3 nu + 1/2. The x direction is a channel with a Zou-He velocity
+inlet and a zero-gradient outlet; the y edges are periodic, no-slip
+(full-way bounce-back) or free-slip (specular reflection). A no-slip
+channel develops the parabolic Poiseuille profile.
+
+### Vorticity-streamfunction Navier-Stokes
+
+`NavierStokesSolver` advances the vorticity with explicit Euler, solves
+laplacian(psi) = -omega with Jacobi iterations, and imposes Thom's wall
+vorticity for the lid-driven cavity.
+
+### Weakly compressible SPH
+
+`SPHFluid` uses the 2D cubic spline kernel, summation density, the Tait
+equation of state p = B((rho/rho0)^gamma - 1), the symmetric pressure
+force (exact momentum conservation), Monaghan's artificial viscosity and
+kick-drift-kick leapfrog. Neighbours come from a cell list rebuilt every
+step. A standing sound wave oscillates with the analytic period L/c0.
+
+### Compressible Euler (1D)
+
+`solve_euler_1d` is a conservative finite-volume scheme: MUSCL (minmod)
+reconstruction of the primitive variables, HLLC fluxes and SSP-RK2 time
+stepping. It reproduces the exact Sod shock-tube solution and conserves
+mass, momentum and energy to round-off with periodic or reflective
+boundaries.
+
+---
+
+## 8. Tight-Binding Models
+
+`TightBinding` stores on-site energies and hoppings t_ij(R) between
+orbital i in the home cell and orbital j in the cell at lattice vector R.
+The Bloch Hamiltonian
+
+    H_ij(k) = eps_i delta_ij + sum_R t_ij(R) exp(i k.R) + h.c.
+
+is diagonalized per k (vmapped). Built-in models: chain
+(E = eps - 2t cos ka), square lattice and honeycomb (graphene, with Dirac
+points at the zone corners). `finite_hamiltonian` builds open or
+periodic real-space supercells. Models are pytrees, so band energies are
+differentiable with respect to the hoppings.
+
+---
+
+## 9. Coupled Oscillators and Normal Modes
 
 For N identical masses connected by springs (stiffness k, mass m)
 with a fixed wall on the left and a free end on the right, the
@@ -238,3 +322,9 @@ analytical eigenfrequencies.
 - Taflove, Hagness. "Computational Electrodynamics: The Finite-
   Difference Time-Domain Method" (2005)
 - Newman. "Monte Carlo Methods in Statistical Physics" (1999)
+- Berenger. "A perfectly matched layer for the absorption of
+  electromagnetic waves", J. Comput. Phys. 114, 185-200 (1994)
+- Monaghan. "Smoothed particle hydrodynamics", Annu. Rev. Astron.
+  Astrophys. 30, 543-574 (1992)
+- Toro. "Riemann Solvers and Numerical Methods for Fluid Dynamics" (2009)
+- Kruger et al. "The Lattice Boltzmann Method" (2017)

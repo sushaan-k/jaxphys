@@ -21,14 +21,14 @@ def main() -> None:
     system = jp.NBody(
         masses=[1.0, 0.001, 0.0003],
         positions=[
-            [0.0, 0.0, 0.0],   # Sun at origin
-            [5.2, 0.0, 0.0],   # Jupiter-like orbit
-            [1.0, 0.0, 0.0],   # Earth-like orbit
+            [0.0, 0.0, 0.0],  # Sun at origin
+            [5.2, 0.0, 0.0],  # Jupiter-like orbit
+            [1.0, 0.0, 0.0],  # Earth-like orbit
         ],
         velocities=[
-            [0.0, 0.0, 0.0],   # Sun stationary
+            [0.0, 0.0, 0.0],  # Sun stationary
             [0.0, 0.44, 0.0],  # Jupiter circular velocity
-            [0.0, 1.0, 0.0],   # Earth circular velocity
+            [0.0, 1.0, 0.0],  # Earth circular velocity
         ],
         G=1.0,
         softening=1e-6,
@@ -43,7 +43,7 @@ def main() -> None:
     )
 
     print(f"Simulation complete: {trajectory.n_steps} saved snapshots")
-    print(f"Energy drift: {trajectory.positions.shape}")
+    print(f"Trajectory shape (snapshots, bodies, xyz): {trajectory.positions.shape}")
 
     # Check energy conservation
     e0 = float(trajectory.energy[0])

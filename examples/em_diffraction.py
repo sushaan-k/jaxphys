@@ -32,7 +32,7 @@ def main() -> None:
 
     print(f"Saved snapshots: {fields.t.shape[0]}")
     print(f"Peak |Ez| on final frame: {float(jnp.max(jnp.abs(final_ez))):.3e}")
-    print(f"Screen intensity proxy: {float(jnp.mean(screen_slice ** 2)):.3e}")
+    print(f"Screen intensity proxy: {float(jnp.mean(screen_slice**2)):.3e}")
 
     try:
         import matplotlib.pyplot as plt

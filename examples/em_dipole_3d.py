@@ -36,8 +36,8 @@ grid.add_source(
 )
 
 print(f"3D FDTD simulation: {n}x{n}x{n} grid")
-print(f"Resolution: {resolution*100:.1f} cm")
-print(f"Source: 3 GHz z-dipole at center")
+print(f"Resolution: {resolution * 100:.1f} cm")
+print("Source: 3 GHz z-dipole at center")
 print("Running simulation...")
 
 # Run simulation
@@ -61,12 +61,8 @@ quadrants = [
 print(f"Field in quadrants: {[f'{q:.4e}' for q in quadrants]}")
 
 # Total energy in the grid (sum of E^2)
-total_E2 = float(
-    jnp.sum(fields.ex[-1] ** 2 + fields.ey[-1] ** 2 + fields.ez[-1] ** 2)
-)
-total_H2 = float(
-    jnp.sum(fields.hx[-1] ** 2 + fields.hy[-1] ** 2 + fields.hz[-1] ** 2)
-)
+total_E2 = float(jnp.sum(fields.ex[-1] ** 2 + fields.ey[-1] ** 2 + fields.ez[-1] ** 2))
+total_H2 = float(jnp.sum(fields.hx[-1] ** 2 + fields.hy[-1] ** 2 + fields.hz[-1] ** 2))
 print(f"Total |E|^2: {total_E2:.4e}")
 print(f"Total |H|^2: {total_H2:.4e}")
 
@@ -75,9 +71,7 @@ print("\n--- With dielectric slab (eps_r=4) ---")
 grid2 = jp.EMGrid3D(
     size=(n, n, n), resolution=resolution, boundary="absorbing", pml_layers=6
 )
-grid2.add_source(
-    jp.PointSource3D(frequency=3e9, position=(center, center, center))
-)
+grid2.add_source(jp.PointSource3D(frequency=3e9, position=(center, center, center)))
 
 # Add dielectric slab on one side
 mask = jnp.zeros((n, n, n), dtype=bool)
