@@ -1,0 +1,379 @@
+{
+ "run_id": "20260926T001258Z_before_after",
+ "base": "e51cc7ccc72c43eaacbc1a87274f486a79445b56",
+ "head": "working tree (HEAD dcb0e5a122cb)",
+ "rounds": 3,
+ "environment": {
+  "timestamp_utc": "2026-09-26T00:12:58+00:00",
+  "python": "3.11.15",
+  "platform": "Linux-6.18.44-fc-v42-x86_64-with-glibc2.39",
+  "cpu_model": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+  "cpu_count": 4,
+  "jax": "0.10.2",
+  "jaxlib": "0.10.2",
+  "numpy": "2.4.6",
+  "scipy": "1.17.1",
+  "jaxphys": "0.2.0",
+  "jax_devices": [
+   "cpu:0"
+  ],
+  "jax_default_backend": "cpu",
+  "jax_enable_x64": true,
+  "xla_flags": null,
+  "git_commit": "dcb0e5a122cb41e511a7f64e0e756abf47d1d29c",
+  "git_dirty": true
+ },
+ "rows": [
+  {
+   "case": "hamiltonian",
+   "description": "HamiltonianSystem leapfrog, 1 dof, 20000 steps, save_every=100",
+   "base": {
+    "first_call_s": 0.9607496939970588,
+    "warm_median_s": 0.11875486699864268,
+    "warm_medians_per_round_s": [
+     0.1279302729999472,
+     0.11135268599900883,
+     0.11875486699864268
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 383.0390625
+   },
+   "head": {
+    "first_call_s": 0.23770962500202586,
+    "warm_median_s": 0.000554406000446761,
+    "warm_medians_per_round_s": [
+     0.000554406000446761,
+     0.0005485680012498051,
+     0.0005602640012511984
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 334.27734375
+   },
+   "warm_speedup": 214.20198717716906
+  },
+  {
+   "case": "lagrangian",
+   "description": "LagrangianSystem double pendulum rk4, 20000 steps, save_every=100",
+   "base": {
+    "first_call_s": 2.6155630690009275,
+    "warm_median_s": 0.9691444730015064,
+    "warm_medians_per_round_s": [
+     1.0084560010000132,
+     0.9638216659986938,
+     0.9691444730015064
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 449.58984375
+   },
+   "head": {
+    "first_call_s": 0.9023227559991938,
+    "warm_median_s": 0.11378487900219625,
+    "warm_medians_per_round_s": [
+     0.11378487900219625,
+     0.11374361200068961,
+     0.11764955099715735
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 361.6484375
+   },
+   "warm_speedup": 8.517339751117547
+  },
+  {
+   "case": "nbody",
+   "description": "NBody N=64, 20000 steps, save_every=100",
+   "base": {
+    "first_call_s": 4.028560397997353,
+    "warm_median_s": 2.7876298740011407,
+    "warm_medians_per_round_s": [
+     2.7876298740011407,
+     2.7705577420019836,
+     2.8516250280008535
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 669.3203125
+   },
+   "head": {
+    "first_call_s": 1.3070973080029944,
+    "warm_median_s": 0.9850229089970526,
+    "warm_medians_per_round_s": [
+     0.9850229089970526,
+     0.9855681180015381,
+     0.9394641459984996
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 365.30078125
+   },
+   "warm_speedup": 2.8300152702433055
+  },
+  {
+   "case": "rigid_body",
+   "description": "RigidBody rk4, 20000 steps",
+   "base": {
+    "first_call_s": 0.6398830450016249,
+    "warm_median_s": 0.28468085900021833,
+    "warm_medians_per_round_s": [
+     0.29788365299828,
+     0.28200804199877894,
+     0.28468085900021833
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 401.66796875
+   },
+   "head": {
+    "first_call_s": 0.33328342299864744,
+    "warm_median_s": 0.018891209998400882,
+    "warm_medians_per_round_s": [
+     0.01823471699754009,
+     0.01964870500160032,
+     0.018891209998400882
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 352.96875
+   },
+   "warm_speedup": 15.069487821283879
+  },
+  {
+   "case": "charges",
+   "description": "ChargeSystem 2 charges, 20000 steps, save_every=100",
+   "base": {
+    "first_call_s": 1.8115405289972841,
+    "warm_median_s": 0.20324519200221403,
+    "warm_medians_per_round_s": [
+     0.1965565569989849,
+     0.20324519200221403,
+     0.2334299469985126
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 443.140625
+   },
+   "head": {
+    "first_call_s": 0.2436688560010225,
+    "warm_median_s": 0.009175766001135344,
+    "warm_medians_per_round_s": [
+     0.009175766001135344,
+     0.009032326001033653,
+     0.009766957002284471
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 346.1953125
+   },
+   "warm_speedup": 22.150215249284464
+  },
+  {
+   "case": "schrodinger",
+   "description": "solve_schrodinger 2048 points, 20000 steps, save_every=100",
+   "base": {
+    "first_call_s": 2.4966491229970416,
+    "warm_median_s": 1.4824425270016945,
+    "warm_medians_per_round_s": [
+     1.4824425270016945,
+     1.4667678969999542,
+     1.509882516998914
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 1693.6015625
+   },
+   "head": {
+    "first_call_s": 1.571808016000432,
+    "warm_median_s": 0.5887989990005735,
+    "warm_medians_per_round_s": [
+     0.5887989990005735,
+     0.5830305479976232,
+     0.6081099969997013
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 398.55078125
+   },
+   "warm_speedup": 2.517739550369464
+  },
+  {
+   "case": "fdtd2d",
+   "description": "EMGrid 200x200, 856 steps, save_every=50",
+   "base": {
+    "first_call_s": 1.346468300998822,
+    "warm_median_s": 0.7035014089997276,
+    "warm_medians_per_round_s": [
+     0.7571611259991187,
+     0.6555015850026393,
+     0.7035014089997276
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 1261.859375
+   },
+   "head": {
+    "first_call_s": 1.2418189529998926,
+    "warm_median_s": 0.20824457700291532,
+    "warm_medians_per_round_s": [
+     0.20824457700291532,
+     0.19935367799917003,
+     0.29129444000136573
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 456.40625
+   },
+   "warm_speedup": 3.37824599864552
+  },
+  {
+   "case": "fdtd3d",
+   "description": "EMGrid3D 40^3, 157 steps, save_every=20",
+   "base": {
+    "first_call_s": 1.3936500610034273,
+    "warm_median_s": 0.5790837919994374,
+    "warm_medians_per_round_s": [
+     0.5790837919994374,
+     0.5986648889993376,
+     0.5670421789982356
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 934.2578125
+   },
+   "head": {
+    "first_call_s": 1.7932360710001376,
+    "warm_median_s": 0.13929529800225282,
+    "warm_medians_per_round_s": [
+     0.13900014399769134,
+     0.13929529800225282,
+     0.16702752900164342
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 571.71484375
+   },
+   "warm_speedup": 4.157238616841696
+  },
+  {
+   "case": "lbm",
+   "description": "LBMGrid 200x80, 3000 steps, save_every=100",
+   "base": {
+    "first_call_s": 8.976404158998776,
+    "warm_median_s": 7.794298234999587,
+    "warm_medians_per_round_s": [
+     7.892019032999087,
+     7.543705983000109,
+     7.794298234999587
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 1613.79296875
+   },
+   "head": {
+    "first_call_s": 3.894475260996842,
+    "warm_median_s": 2.1099074900012056,
+    "warm_medians_per_round_s": [
+     2.4327967330027604,
+     2.1099074900012056,
+     2.1046669959978317
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 460.39453125
+   },
+   "warm_speedup": 3.6941421706575075
+  },
+  {
+   "case": "navier_stokes",
+   "description": "NavierStokesSolver 64x64, 2000 steps, 50 Jacobi its, save_every=100",
+   "base": {
+    "first_call_s": 1.1521558700005698,
+    "warm_median_s": 0.8784913320014311,
+    "warm_medians_per_round_s": [
+     0.8616732339978626,
+     0.9112726020030095,
+     0.8784913320014311
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 606.92578125
+   },
+   "head": {
+    "first_call_s": 0.8121136890003982,
+    "warm_median_s": 0.28517281300082686,
+    "warm_medians_per_round_s": [
+     0.2779287459998159,
+     0.28517281300082686,
+     0.3262179439989268
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 374.42578125
+   },
+   "warm_speedup": 3.0805577949637293
+  },
+  {
+   "case": "ising_metropolis",
+   "description": "IsingLattice.run_metropolis 16x16, 50+200 sweeps",
+   "base": {
+    "first_call_s": 3.1297671559987066,
+    "warm_median_s": 1.5437022980004258,
+    "warm_medians_per_round_s": [
+     1.5437022980004258,
+     1.5984086230018875,
+     1.5343350770017423
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 403.63671875
+   },
+   "head": {
+    "first_call_s": 1.2934589610013063,
+    "warm_median_s": 0.022010111999406945,
+    "warm_medians_per_round_s": [
+     0.019742568998481147,
+     0.022010111999406945,
+     0.02241680500083021
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 380.46875
+   },
+   "warm_speedup": 70.13604919602501
+  },
+  {
+   "case": "ising_wolff",
+   "description": "sweep_temperatures Wolff 16x16, 1 temperature, 20+100 updates",
+   "base": {
+    "first_call_s": 34.28408806100197,
+    "warm_median_s": 34.947271673001524,
+    "warm_medians_per_round_s": [
+     33.47935114500069,
+     34.99455735900119,
+     34.947271673001524
+    ],
+    "compiles_per_warm_call": 120.0,
+    "peak_rss_mb": 2772.90234375
+   },
+   "head": {
+    "first_call_s": 1.457295256001089,
+    "warm_median_s": 0.008863514001859585,
+    "warm_medians_per_round_s": [
+     0.008863514001859585,
+     0.011233387001993833,
+     0.008304711998789571
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 402.0703125
+   },
+   "warm_speedup": 3942.8235421831014
+  },
+  {
+   "case": "lindblad",
+   "description": "lindblad_evolve 2-level, 20000 steps, save_every=100",
+   "base": {
+    "first_call_s": 1.0649831970004016,
+    "warm_median_s": 0.37794500299787614,
+    "warm_medians_per_round_s": [
+     0.3738451450008142,
+     0.39261372400142136,
+     0.37794500299787614
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 409.80078125
+   },
+   "head": {
+    "first_call_s": 0.768577628001367,
+    "warm_median_s": 0.18356718799986993,
+    "warm_medians_per_round_s": [
+     0.18356718799986993,
+     0.18945187699864618,
+     0.18240611200235435
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 359.4453125
+   },
+   "warm_speedup": 2.058891935513791
+  }
+ ]
+}

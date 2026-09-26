@@ -1,0 +1,163 @@
+{
+ "run_id": "20260926T002258Z_before_after",
+ "base": "22abad21b310cd76a1dcffb4118494d2c430905d",
+ "head": "working tree (HEAD dcb0e5a122cb)",
+ "rounds": 3,
+ "environment": {
+  "timestamp_utc": "2026-09-26T00:22:59+00:00",
+  "python": "3.11.15",
+  "platform": "Linux-6.18.44-fc-v42-x86_64-with-glibc2.39",
+  "cpu_model": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+  "cpu_count": 4,
+  "jax": "0.10.2",
+  "jaxlib": "0.10.2",
+  "numpy": "2.4.6",
+  "scipy": "1.17.1",
+  "jaxphys": "0.2.0",
+  "jax_devices": [
+   "cpu:0"
+  ],
+  "jax_default_backend": "cpu",
+  "jax_enable_x64": true,
+  "xla_flags": null,
+  "git_commit": "dcb0e5a122cb41e511a7f64e0e756abf47d1d29c",
+  "git_dirty": true
+ },
+ "rows": [
+  {
+   "case": "nbody",
+   "description": "NBody N=64, 20000 steps, save_every=100",
+   "base": {
+    "first_call_s": 2.9601678289982374,
+    "warm_median_s": 2.6955454950002604,
+    "warm_medians_per_round_s": [
+     2.6655207820003852,
+     2.6955454950002604,
+     2.7141382839981816
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 364.921875
+   },
+   "head": {
+    "first_call_s": 1.2885102649997862,
+    "warm_median_s": 0.9496822179971787,
+    "warm_medians_per_round_s": [
+     0.9496822179971787,
+     0.9199077599987504,
+     1.0054607519996352
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 361.96875
+   },
+   "warm_speedup": 2.838365764797618
+  },
+  {
+   "case": "rigid_body",
+   "description": "RigidBody rk4, 20000 steps",
+   "base": {
+    "first_call_s": 0.3056208490015706,
+    "warm_median_s": 0.01732822900157771,
+    "warm_medians_per_round_s": [
+     0.01986070299972198,
+     0.016534039001271594,
+     0.01732822900157771
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 358.796875
+   },
+   "head": {
+    "first_call_s": 0.32628267600011895,
+    "warm_median_s": 0.01840119299959042,
+    "warm_medians_per_round_s": [
+     0.01840119299959042,
+     0.03430200799994054,
+     0.01807438800096861
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 353.33984375
+   },
+   "warm_speedup": 0.9416905198463712
+  },
+  {
+   "case": "charges",
+   "description": "ChargeSystem 2 charges, 20000 steps, save_every=100",
+   "base": {
+    "first_call_s": 0.23648215000139317,
+    "warm_median_s": 0.009095375000470085,
+    "warm_medians_per_round_s": [
+     0.009333549001894426,
+     0.009095375000470085,
+     0.008762022000155412
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 350.08203125
+   },
+   "head": {
+    "first_call_s": 0.26371952800036524,
+    "warm_median_s": 0.008989337999082636,
+    "warm_medians_per_round_s": [
+     0.008989337999082636,
+     0.008945038000092609,
+     0.009910531996865757
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 349.7734375
+   },
+   "warm_speedup": 1.011795863210202
+  },
+  {
+   "case": "lbm",
+   "description": "LBMGrid 200x80, 3000 steps, save_every=100",
+   "base": {
+    "first_call_s": 5.867141720998916,
+    "warm_median_s": 3.6719153209996875,
+    "warm_medians_per_round_s": [
+     3.7397229569978663,
+     3.643142033000913,
+     3.6719153209996875
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 488.8984375
+   },
+   "head": {
+    "first_call_s": 3.724493232999521,
+    "warm_median_s": 2.231482680002955,
+    "warm_medians_per_round_s": [
+     2.1678121459990507,
+     2.2425189839996165,
+     2.231482680002955
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 463.4140625
+   },
+   "warm_speedup": 1.6455047372336429
+  },
+  {
+   "case": "ising_wolff",
+   "description": "sweep_temperatures Wolff 16x16, 1 temperature, 20+100 updates",
+   "base": {
+    "first_call_s": 1.4919732050002494,
+    "warm_median_s": 0.8322885959969426,
+    "warm_medians_per_round_s": [
+     0.8063335599981656,
+     0.8682157580005878,
+     0.8322885959969426
+    ],
+    "compiles_per_warm_call": 1.0,
+    "peak_rss_mb": 430.1640625
+   },
+   "head": {
+    "first_call_s": 1.510019106000982,
+    "warm_median_s": 0.009091545001865597,
+    "warm_medians_per_round_s": [
+     0.008711559003131697,
+     0.009209158000885509,
+     0.009091545001865597
+    ],
+    "compiles_per_warm_call": 0.0,
+    "peak_rss_mb": 403.78515625
+   },
+   "warm_speedup": 91.54534194420815
+  }
+ ]
+}

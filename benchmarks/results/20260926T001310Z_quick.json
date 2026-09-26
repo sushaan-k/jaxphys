@@ -1,0 +1,2078 @@
+{
+ "run_id": "20260926T001310Z_quick",
+ "mode": "quick",
+ "suites": [
+  "perf",
+  "scaling",
+  "accuracy"
+ ],
+ "repeats": 5,
+ "numpy_repeats": 3,
+ "seeds": {
+  "perf.nbody_initial_conditions": "jax.random.PRNGKey(N) / fold_in(., 1)",
+  "perf.ising_metropolis": "JAX PRNGKey(7); NumPy default_rng(7)",
+  "perf.ising_wolff": "JAX PRNGKey(11); NumPy default_rng(11)",
+  "perf.lindblad_hamiltonian": "NumPy default_rng(d)",
+  "perf.sph_velocities": "NumPy default_rng(1)",
+  "perf.tight_binding_k_points": "jax.random.PRNGKey(n_k)",
+  "accuracy.ising_tc": "jax.random.PRNGKey(L) split per temperature",
+  "accuracy.wolff_vs_metropolis": "jax.random.PRNGKey(100 + i) per temperature",
+  "accuracy.gradients.nbody": "jax.random.PRNGKey(0), PRNGKey(1)",
+  "scaling": "jax.random.PRNGKey(0) / PRNGKey(1)"
+ },
+ "environment": {
+  "timestamp_utc": "2026-09-26T00:13:10+00:00",
+  "python": "3.11.15",
+  "platform": "Linux-6.18.44-fc-v42-x86_64-with-glibc2.39",
+  "cpu_model": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+  "cpu_count": 4,
+  "jax": "0.10.2",
+  "jaxlib": "0.10.2",
+  "numpy": "2.4.6",
+  "scipy": "1.17.1",
+  "jaxphys": "0.2.0",
+  "jax_devices": [
+   "cpu:0"
+  ],
+  "jax_default_backend": "cpu",
+  "jax_enable_x64": true,
+  "xla_flags": null,
+  "git_commit": "dcb0e5a122cb41e511a7f64e0e756abf47d1d29c",
+  "git_dirty": false
+ },
+ "perf": [
+  {
+   "solver": "HamiltonianSystem (leapfrog, 1 dof)",
+   "size": "20000 steps",
+   "params": {
+    "n_steps": 20000,
+    "dt": 0.001,
+    "save_every": 100
+   },
+   "jax": {
+    "first_call_s": 0.2943023379993974,
+    "compile": {
+     "trace": 0.03947639465332031,
+     "lower": 0.04424309730529785,
+     "backend": 0.1788651943206787,
+     "n": 5.0,
+     "compile_s": 0.2625846862792969
+    },
+    "steady": {
+     "median_s": 0.000587010999879567,
+     "iqr_s": 4.914099918096326e-05,
+     "q25_s": 0.0005823370011057705,
+     "q75_s": 0.0006314780002867337,
+     "min_s": 0.0005357270019885618,
+     "max_s": 0.0007456710009137169,
+     "n": 5,
+     "mean_s": 0.0006164448008348699
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.0025685920008982066,
+     "iqr_s": 0.0001703095003904309,
+     "q25_s": 0.0025202835004165536,
+     "q75_s": 0.0026905930008069845,
+     "min_s": 0.0024719749999349006,
+     "max_s": 0.0028125940007157624,
+     "n": 3,
+     "mean_s": 0.0026177203338496233
+    }
+   },
+   "throughput_unit": "steps/s",
+   "jax_throughput": 34070911.79569593,
+   "numpy_throughput": 7786367.003014194,
+   "speedup_vs_numpy": 4.375713575086646,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-12,
+    "max_abs": 5.773159728050814e-15,
+    "max_rel": 3.0808688933348094e-15,
+    "passed": true,
+    "detail": {
+     "q": {
+      "max_abs": 3.0808688933348094e-15,
+      "max_rel": 3.0808688933348094e-15
+     },
+     "p": {
+      "max_abs": 5.773159728050814e-15,
+      "max_rel": 2.8866096006073675e-15
+     }
+    }
+   },
+   "notes": ""
+  },
+  {
+   "solver": "LagrangianSystem (double pendulum, rk4)",
+   "size": "2000 steps",
+   "params": {
+    "n_steps": 2000,
+    "dt": 0.001,
+    "save_every": 100
+   },
+   "jax": {
+    "first_call_s": 0.8128879970026901,
+    "compile": {
+     "trace": 0.3336772918701172,
+     "lower": 0.06993222236633301,
+     "backend": 0.3871023654937744,
+     "n": 3.0,
+     "compile_s": 0.7907118797302246
+    },
+    "steady": {
+     "median_s": 0.012070745997334598,
+     "iqr_s": 0.0001004959995043464,
+     "q25_s": 0.012053856000420637,
+     "q75_s": 0.012154351999924984,
+     "min_s": 0.012013759002002189,
+     "max_s": 0.013203126000007614,
+     "n": 5,
+     "mean_s": 0.012299167799938004
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.10518681800022023,
+     "iqr_s": 0.00038767549995100126,
+     "q25_s": 0.10500379850054742,
+     "q75_s": 0.10539147400049842,
+     "min_s": 0.10482077900087461,
+     "max_s": 0.10559613000077661,
+     "n": 3,
+     "mean_s": 0.10520124233395715
+    }
+   },
+   "throughput_unit": "steps/s",
+   "jax_throughput": 165689.8422385518,
+   "numpy_throughput": 19013.789351397743,
+   "speedup_vs_numpy": 8.714193640015875,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-09,
+    "max_abs": 1.3322676295501878e-15,
+    "max_rel": 9.86577350409194e-16,
+    "passed": true,
+    "detail": {
+     "q": {
+      "max_abs": 3.677613769070831e-16,
+      "max_rel": 9.385698550320591e-16
+     },
+     "qdot": {
+      "max_abs": 1.3322676295501878e-15,
+      "max_rel": 9.86577350409194e-16
+     }
+    }
+   },
+   "notes": "NumPy uses the closed-form equations of motion; JAX derives them by autodiff (mass matrix + mixed Hessian per step)."
+  },
+  {
+   "solver": "NBody (velocity Verlet, O(N^2))",
+   "size": "N=16, 2000 steps",
+   "params": {
+    "n_bodies": 16,
+    "n_steps": 2000,
+    "dt": 0.000125,
+    "save_every": 100
+   },
+   "jax": {
+    "first_call_s": 0.41265836100137676,
+    "compile": {
+     "trace": 0.024916887283325195,
+     "lower": 0.03511643409729004,
+     "backend": 0.34342503547668457,
+     "n": 3.0,
+     "compile_s": 0.4034583568572998
+    },
+    "steady": {
+     "median_s": 0.004495086999668274,
+     "iqr_s": 0.0005810299990116619,
+     "q25_s": 0.004388978002680233,
+     "q75_s": 0.004970008001691895,
+     "min_s": 0.004300059998058714,
+     "max_s": 0.005479004001244903,
+     "n": 5,
+     "mean_s": 0.004726627400668803
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.06493093099925318,
+     "iqr_s": 0.0006721464997099247,
+     "q25_s": 0.06446322099873214,
+     "q75_s": 0.06513536749844206,
+     "min_s": 0.0639955109982111,
+     "max_s": 0.06533980399763095,
+     "n": 3,
+     "mean_s": 0.06475541533169842
+    }
+   },
+   "throughput_unit": "pair-interactions/s",
+   "jax_throughput": 113902133.60448514,
+   "numpy_throughput": 7885301.998917726,
+   "speedup_vs_numpy": 14.444866362774494,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-09,
+    "max_abs": 2.7755575615628914e-17,
+    "max_rel": 1.1957465042215037e-16,
+    "passed": true,
+    "detail": {
+     "positions": {
+      "max_abs": 0.0,
+      "max_rel": 0.0
+     },
+     "velocities": {
+      "max_abs": 2.7755575615628914e-17,
+      "max_rel": 1.1957465042215037e-16
+     }
+    }
+   },
+   "notes": ""
+  },
+  {
+   "solver": "RigidBody (Euler eqs + quaternion, rk4)",
+   "size": "5000 steps",
+   "params": {
+    "n_steps": 5000,
+    "dt": 0.01
+   },
+   "jax": {
+    "first_call_s": 0.28476482999758446,
+    "compile": {
+     "trace": 0.02990579605102539,
+     "lower": 0.03145241737365723,
+     "backend": 0.21237397193908691,
+     "n": 2.0,
+     "compile_s": 0.27373218536376953
+    },
+    "steady": {
+     "median_s": 0.005453154000861105,
+     "iqr_s": 0.00018960200031870045,
+     "q25_s": 0.005319482999766478,
+     "q75_s": 0.005509085000085179,
+     "min_s": 0.005104117997689173,
+     "max_s": 0.006201123000209918,
+     "n": 5,
+     "mean_s": 0.00551739259972237
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.24680074000207242,
+     "iqr_s": 0.009488034500463982,
+     "q25_s": 0.23848667050151562,
+     "q75_s": 0.2479747050019796,
+     "min_s": 0.23017260100095882,
+     "max_s": 0.24914867000188679,
+     "n": 3,
+     "mean_s": 0.24204067033497267
+    }
+   },
+   "throughput_unit": "steps/s",
+   "jax_throughput": 916900.5678567766,
+   "numpy_throughput": 20259.25854176132,
+   "speedup_vs_numpy": 45.25834773107457,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-10,
+    "max_abs": 6.716849298982197e-15,
+    "max_rel": 6.716849298982197e-15,
+    "passed": true,
+    "detail": {
+     "quaternion": {
+      "max_abs": 6.716849298982197e-15,
+      "max_rel": 6.716849298982197e-15
+     },
+     "omega": {
+      "max_abs": 1.3877787807814457e-15,
+      "max_rel": 1.3808914998790086e-15
+     }
+    }
+   },
+   "notes": ""
+  },
+  {
+   "solver": "ChargeSystem (Coulomb + uniform B, Boris)",
+   "size": "3 charges, 5000 steps",
+   "params": {
+    "n_steps": 5000,
+    "dt": 2e-06,
+    "save_every": 100
+   },
+   "jax": {
+    "first_call_s": 0.24953359800201724,
+    "compile": {
+     "trace": 0.021125078201293945,
+     "lower": 0.025780439376831055,
+     "backend": 0.19517278671264648,
+     "n": 1.0,
+     "compile_s": 0.24207830429077148
+    },
+    "steady": {
+     "median_s": 0.004188630999124143,
+     "iqr_s": 0.00013740499707637355,
+     "q25_s": 0.004082298000867013,
+     "q75_s": 0.0042197029979433864,
+     "min_s": 0.004054015997098759,
+     "max_s": 0.004634373999579111,
+     "n": 5,
+     "mean_s": 0.004235804398922483
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.9391627090008114,
+     "iqr_s": 0.013007058501898427,
+     "q25_s": 0.9268553749989223,
+     "q75_s": 0.9398624335008208,
+     "min_s": 0.9145480409970332,
+     "max_s": 0.9405621580008301,
+     "n": 3,
+     "mean_s": 0.9314243026662249
+    }
+   },
+   "throughput_unit": "steps/s",
+   "jax_throughput": 1193707.4430871368,
+   "numpy_throughput": 5323.891112882422,
+   "speedup_vs_numpy": 224.21710320082946,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-10,
+    "max_abs": 2.5579538487363607e-13,
+    "max_rel": 9.336804973871509e-15,
+    "passed": true,
+    "detail": {
+     "positions": {
+      "max_abs": 2.5153490401663703e-16,
+      "max_rel": 1.2472231434265692e-15
+     },
+     "velocities": {
+      "max_abs": 2.5579538487363607e-13,
+      "max_rel": 9.336804973871509e-15
+     }
+    }
+   },
+   "notes": ""
+  },
+  {
+   "solver": "solve_schrodinger (split-operator FFT)",
+   "size": "512 points, 2000 steps",
+   "params": {
+    "n_points": 512,
+    "n_steps": 2000,
+    "dt": 0.001,
+    "save_every": 100
+   },
+   "jax": {
+    "first_call_s": 1.3861057350004558,
+    "compile": {
+     "trace": 0.028373241424560547,
+     "lower": 0.19298481941223145,
+     "backend": 1.0998523235321045,
+     "n": 34.0,
+     "compile_s": 1.3212103843688965
+    },
+    "steady": {
+     "median_s": 0.01946641699760221,
+     "iqr_s": 0.0006267900025704876,
+     "q25_s": 0.018985898997925688,
+     "q75_s": 0.019612689000496175,
+     "min_s": 0.018935675998363877,
+     "max_s": 0.019720543998118956,
+     "n": 5,
+     "mean_s": 0.019344244998501382
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.05842578499868978,
+     "iqr_s": 0.02035061899914581,
+     "q25_s": 0.05708881499958807,
+     "q75_s": 0.07743943399873388,
+     "min_s": 0.055751845000486355,
+     "max_s": 0.09645308299877797,
+     "n": 3,
+     "mean_s": 0.0702102376659847
+    }
+   },
+   "throughput_unit": "point-steps/s",
+   "jax_throughput": 52603414.38931119,
+   "numpy_throughput": 17526508.202208385,
+   "speedup_vs_numpy": 3.001363065729375,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-09,
+    "max_abs": 6.444010263204486e-14,
+    "max_rel": 8.535917530884573e-14,
+    "passed": true,
+    "detail": {
+     "psi": {
+      "max_abs": 6.444010263204486e-14,
+      "max_rel": 8.535917530884573e-14
+     }
+    }
+   },
+   "notes": ""
+  },
+  {
+   "solver": "solve_schrodinger_2d (split-operator FFT)",
+   "size": "64x64, 200 steps",
+   "params": {
+    "grid": [
+     64,
+     64
+    ],
+    "n_steps": 200,
+    "dt": 0.001,
+    "save_every": 100
+   },
+   "jax": {
+    "first_call_s": 1.4872612149993074,
+    "compile": {
+     "trace": 0.024785280227661133,
+     "lower": 0.188521146774292,
+     "backend": 1.2089769840240479,
+     "n": 33.0,
+     "compile_s": 1.422283411026001
+    },
+    "steady": {
+     "median_s": 0.014607899996917695,
+     "iqr_s": 0.001196172001073137,
+     "q25_s": 0.013849334998667473,
+     "q75_s": 0.01504550699974061,
+     "min_s": 0.01342809500056319,
+     "max_s": 0.01889999299964984,
+     "n": 5,
+     "mean_s": 0.01516616599910776
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.02376391000143485,
+     "iqr_s": 0.0009848354984569596,
+     "q25_s": 0.02312414000152785,
+     "q75_s": 0.02410897549998481,
+     "min_s": 0.022484370001620846,
+     "max_s": 0.024454040998534765,
+     "n": 3,
+     "mean_s": 0.023567440333863487
+    }
+   },
+   "throughput_unit": "point-steps/s",
+   "jax_throughput": 56079244.804034345,
+   "numpy_throughput": 34472441.61211422,
+   "speedup_vs_numpy": 1.6267848223529118,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-09,
+    "max_abs": 2.0816681711721685e-15,
+    "max_rel": 4.12353944970591e-15,
+    "passed": true,
+    "detail": {
+     "psi": {
+      "max_abs": 2.0816681711721685e-15,
+      "max_rel": 4.12353944970591e-15
+     }
+    }
+   },
+   "notes": ""
+  },
+  {
+   "solver": "lindblad_evolve (rk4)",
+   "size": "d=2, 5000 steps",
+   "params": {
+    "dim": 2,
+    "n_steps": 5000,
+    "dt": 0.01,
+    "save_every": 100
+   },
+   "jax": {
+    "first_call_s": 0.6014784079998208,
+    "compile": {
+     "trace": 0.02171635627746582,
+     "lower": 0.0744791030883789,
+     "backend": 0.48363614082336426,
+     "n": 10.0,
+     "compile_s": 0.579831600189209
+    },
+    "steady": {
+     "median_s": 0.046263137999631,
+     "iqr_s": 0.003910514999006409,
+     "q25_s": 0.04578699700141442,
+     "q75_s": 0.04969751200042083,
+     "min_s": 0.04351780099750613,
+     "max_s": 0.051374137998209335,
+     "n": 5,
+     "mean_s": 0.04732791719943634
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.5989926340007514,
+     "iqr_s": 0.008707796499948017,
+     "q25_s": 0.5963080020010239,
+     "q75_s": 0.6050157985009719,
+     "min_s": 0.5936233700012963,
+     "max_s": 0.6110389630011923,
+     "n": 3,
+     "mean_s": 0.6012183223344133
+    }
+   },
+   "throughput_unit": "steps/s",
+   "jax_throughput": 108077.40711492335,
+   "numpy_throughput": 8347.34805769536,
+   "speedup_vs_numpy": 12.947514152747898,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-10,
+    "max_abs": 7.771561172376096e-16,
+    "max_rel": 7.771561172376096e-16,
+    "passed": true,
+    "detail": {
+     "rho": {
+      "max_abs": 7.771561172376096e-16,
+      "max_rel": 7.771561172376096e-16
+     }
+    }
+   },
+   "notes": ""
+  },
+  {
+   "solver": "TightBinding.bands (graphene)",
+   "size": "1000 k-points",
+   "params": {
+    "n_k": 1000
+   },
+   "jax": {
+    "first_call_s": 0.1455201799981296,
+    "compile": {
+     "trace": 0.016765832901000977,
+     "lower": 0.030806779861450195,
+     "backend": 0.08966636657714844,
+     "n": 3.0,
+     "compile_s": 0.1372389793395996
+    },
+    "steady": {
+     "median_s": 0.0015995039975678083,
+     "iqr_s": 0.0004050940005981829,
+     "q25_s": 0.0014728610003658105,
+     "q75_s": 0.0018779550009639934,
+     "min_s": 0.0013891840026190039,
+     "max_s": 0.002027439997618785,
+     "n": 5,
+     "mean_s": 0.0016733887998270803
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.0007198370003607124,
+     "iqr_s": 6.022749948897399e-05,
+     "q25_s": 0.0007192459997895639,
+     "q75_s": 0.0007794734992785379,
+     "min_s": 0.0007186549992184155,
+     "max_s": 0.0008391099981963634,
+     "n": 3,
+     "mean_s": 0.0007592006659251638
+    }
+   },
+   "throughput_unit": "k-points/s",
+   "jax_throughput": 625193.8110317894,
+   "numpy_throughput": 1389203.388404454,
+   "speedup_vs_numpy": 0.45003763757720533,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-12,
+    "max_abs": 2.4424906541753444e-15,
+    "max_rel": 3.03360151504391e-16,
+    "passed": true,
+    "detail": {
+     "bands": {
+      "max_abs": 2.4424906541753444e-15,
+      "max_rel": 3.03360151504391e-16
+     }
+    }
+   },
+   "notes": "NumPy uses the closed-form 2x2 Bloch Hamiltonian; jaxphys assembles H(k) from the hopping list."
+  },
+  {
+   "solver": "EMGrid (2D FDTD TM, split-field PML)",
+   "size": "100x100, 200 steps",
+   "params": {
+    "grid": [
+     100,
+     100
+    ],
+    "n_steps": 200,
+    "dt": 2.3350677933821873e-11,
+    "save_every": 50
+   },
+   "jax": {
+    "first_call_s": 1.3925310369995714,
+    "compile": {
+     "trace": 0.05765223503112793,
+     "lower": 0.3096451759338379,
+     "backend": 0.975130558013916,
+     "n": 24.0,
+     "compile_s": 1.3424279689788818
+    },
+    "steady": {
+     "median_s": 0.008237981997808674,
+     "iqr_s": 0.00048018699817475863,
+     "q25_s": 0.007887527001003036,
+     "q75_s": 0.008367713999177795,
+     "min_s": 0.007436869000230217,
+     "max_s": 0.008475262999127153,
+     "n": 5,
+     "mean_s": 0.008081070999469375
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.03798946499955491,
+     "iqr_s": 0.0006589125005120877,
+     "q25_s": 0.03789771949959686,
+     "q75_s": 0.03855663200010895,
+     "min_s": 0.03780597399963881,
+     "max_s": 0.039123799000662984,
+     "n": 3,
+     "mean_s": 0.038306412666618904
+    }
+   },
+   "throughput_unit": "cell-updates/s",
+   "jax_throughput": 242777903.68223742,
+   "numpy_throughput": 52646174.40712661,
+   "speedup_vs_numpy": 4.611501337300836,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-10,
+    "max_abs": 1.3211653993039363e-14,
+    "max_rel": 1.367349102212428e-14,
+    "passed": true,
+    "detail": {
+     "ez": {
+      "max_abs": 1.3211653993039363e-14,
+      "max_rel": 1.367349102212428e-14
+     }
+    }
+   },
+   "notes": ""
+  },
+  {
+   "solver": "EMGrid3D (3D FDTD, split-field PML)",
+   "size": "24^3, 60 steps",
+   "params": {
+    "grid": [
+     24,
+     24,
+     24
+    ],
+    "n_steps": 60,
+    "dt": 1.906574869531006e-11,
+    "save_every": 20
+   },
+   "jax": {
+    "first_call_s": 1.50721477299885,
+    "compile": {
+     "trace": 0.06746649742126465,
+     "lower": 0.15786075592041016,
+     "backend": 1.2331547737121582,
+     "n": 22.0,
+     "compile_s": 1.458482027053833
+    },
+    "steady": {
+     "median_s": 0.02011968399892794,
+     "iqr_s": 0.005828504999954021,
+     "q25_s": 0.019676547002745792,
+     "q75_s": 0.025505052002699813,
+     "min_s": 0.019407480998779647,
+     "max_s": 0.02551171100276406,
+     "n": 5,
+     "mean_s": 0.02204409500118345
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.06107182900086627,
+     "iqr_s": 0.0016232725010922877,
+     "q25_s": 0.060808219999671564,
+     "q75_s": 0.06243149250076385,
+     "min_s": 0.060544610998476855,
+     "max_s": 0.06379115600066143,
+     "n": 3,
+     "mean_s": 0.06180253200000152
+    }
+   },
+   "throughput_unit": "cell-updates/s",
+   "jax_throughput": 41225299.564555585,
+   "numpy_throughput": 13581384.634611726,
+   "speedup_vs_numpy": 3.035426848857091,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-10,
+    "max_abs": 2.4390212072233908e-15,
+    "max_rel": 1.946588443752398e-15,
+    "passed": true,
+    "detail": {
+     "ez": {
+      "max_abs": 2.4390212072233908e-15,
+      "max_rel": 1.946588443752398e-15
+     }
+    }
+   },
+   "notes": ""
+  },
+  {
+   "solver": "solve_fdfd (2D TM, stretched-coordinate PML)",
+   "size": "60x60",
+   "params": {
+    "grid": [
+     60,
+     60
+    ],
+    "pml_layers": 12,
+    "points_per_wavelength": 20
+   },
+   "jax": {
+    "first_call_s": 1.595441090001259,
+    "compile": {
+     "trace": 0.07116413116455078,
+     "lower": 0.22707819938659668,
+     "backend": 1.2319307327270508,
+     "n": 31.0,
+     "compile_s": 1.5301730632781982
+    },
+    "steady": {
+     "median_s": 0.02181607499733218,
+     "iqr_s": 0.006099750000430504,
+     "q25_s": 0.01790811699902406,
+     "q75_s": 0.024007866999454563,
+     "min_s": 0.010251302999677137,
+     "max_s": 0.027251937000983162,
+     "n": 5,
+     "mean_s": 0.02024705979929422
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.01453975000185892,
+     "iqr_s": 0.0016230649980570888,
+     "q25_s": 0.01430127600178821,
+     "q75_s": 0.0159243409998453,
+     "min_s": 0.0140628020017175,
+     "max_s": 0.017308931997831678,
+     "n": 3,
+     "mean_s": 0.015303828000469366
+    }
+   },
+   "throughput_unit": "unknowns/s",
+   "jax_throughput": 165015.93437134006,
+   "numpy_throughput": 247597.10445776142,
+   "speedup_vs_numpy": 0.6664695644673453,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-08,
+    "max_abs": 1.4822950118292848e-11,
+    "max_rel": 1.2005869180294357e-15,
+    "passed": true,
+    "detail": {
+     "ez": {
+      "max_abs": 1.4822950118292848e-11,
+      "max_rel": 1.2005869180294357e-15
+     }
+    }
+   },
+   "notes": "NumPy side: SciPy sparse assembly + spsolve (SuperLU); jaxphys: dense block-tridiagonal elimination with lax.scan."
+  },
+  {
+   "solver": "LBMGrid (D2Q9 BGK)",
+   "size": "100x40, 300 steps",
+   "params": {
+    "grid": [
+     100,
+     40
+    ],
+    "n_steps": 300,
+    "save_every": 100,
+    "nu": 0.05
+   },
+   "jax": {
+    "first_call_s": 2.0519164700017427,
+    "compile": {
+     "trace": 0.07423758506774902,
+     "lower": 0.23961782455444336,
+     "backend": 1.6711130142211914,
+     "n": 29.0,
+     "compile_s": 1.9849684238433838
+    },
+    "steady": {
+     "median_s": 0.08166320199961774,
+     "iqr_s": 0.00339687599989702,
+     "q25_s": 0.07866194300004281,
+     "q75_s": 0.08205881899993983,
+     "min_s": 0.07819906499935314,
+     "max_s": 0.08756764400095562,
+     "n": 5,
+     "mean_s": 0.08163013459998184
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.345781617998,
+     "iqr_s": 0.004310129001169116,
+     "q25_s": 0.34526476849896426,
+     "q75_s": 0.3495748975001334,
+     "min_s": 0.3447479189999285,
+     "max_s": 0.35336817700226675,
+     "n": 3,
+     "mean_s": 0.3479659046667318
+    }
+   },
+   "throughput_unit": "lattice-updates/s",
+   "jax_throughput": 14694500.95779513,
+   "numpy_throughput": 3470398.47562672,
+   "speedup_vs_numpy": 4.2342402640496335,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-10,
+    "max_abs": 2.7755575615628914e-15,
+    "max_rel": 3.6637733008806364e-14,
+    "passed": true,
+    "detail": {
+     "rho": {
+      "max_abs": 2.7755575615628914e-15,
+      "max_rel": 2.7166839690308977e-15
+     },
+     "ux": {
+      "max_abs": 2.5049406993105094e-15,
+      "max_rel": 3.6637733008806364e-14
+     },
+     "uy": {
+      "max_abs": 6.643990912991171e-16,
+      "max_rel": 2.8875289820669905e-14
+     }
+    }
+   },
+   "notes": "Throughput in lattice-site updates/s (1e6 = 1 MLUPS)."
+  },
+  {
+   "solver": "NavierStokesSolver (vorticity-streamfunction)",
+   "size": "32x32, 100 steps",
+   "params": {
+    "grid": [
+     32,
+     32
+    ],
+    "n_steps": 100,
+    "poisson_iters": 50,
+    "save_every": 20
+   },
+   "jax": {
+    "first_call_s": 0.6397030020016246,
+    "compile": {
+     "trace": 0.027456283569335938,
+     "lower": 0.06142163276672363,
+     "backend": 0.5357463359832764,
+     "n": 7.0,
+     "compile_s": 0.6246242523193359
+    },
+    "steady": {
+     "median_s": 0.003440272997977445,
+     "iqr_s": 0.00044328300282359123,
+     "q25_s": 0.003090648999204859,
+     "q75_s": 0.0035339320020284504,
+     "min_s": 0.002941939001175342,
+     "max_s": 0.0036159599985694513,
+     "n": 5,
+     "mean_s": 0.0033245505997911095
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.09500616500008618,
+     "iqr_s": 0.005713923001167132,
+     "q25_s": 0.09403452249898692,
+     "q75_s": 0.09974844550015405,
+     "min_s": 0.09306287999788765,
+     "max_s": 0.10449072600022191,
+     "n": 3,
+     "mean_s": 0.09751992366606525
+    }
+   },
+   "throughput_unit": "cell-steps/s",
+   "jax_throughput": 29765079.707395755,
+   "numpy_throughput": 1077824.7916849093,
+   "speedup_vs_numpy": 27.615879628140217,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-10,
+    "max_abs": 2.6020852139652106e-18,
+    "max_rel": 2.6020852139652106e-18,
+    "passed": true,
+    "detail": {
+     "ux": {
+      "max_abs": 2.6020852139652106e-18,
+      "max_rel": 2.6020852139652106e-18
+     }
+    }
+   },
+   "notes": ""
+  },
+  {
+   "solver": "SPHFluid (weakly compressible, cell list)",
+   "size": "256 particles, 50 steps",
+   "params": {
+    "n_particles": 256,
+    "n_steps": 50,
+    "dt": 0.0016250000000000001
+   },
+   "jax": {
+    "first_call_s": 1.9615596319999895,
+    "compile": {
+     "trace": 0.08883929252624512,
+     "lower": 0.24984312057495117,
+     "backend": 1.5487186908721924,
+     "n": 32.0,
+     "compile_s": 1.8874011039733887
+    },
+    "steady": {
+     "median_s": 0.08566032599992468,
+     "iqr_s": 0.002563310001278296,
+     "q25_s": 0.08436587100004544,
+     "q75_s": 0.08692918100132374,
+     "min_s": 0.08294156799820485,
+     "max_s": 0.09311407199857058,
+     "n": 5,
+     "mean_s": 0.08660220359961386
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.04088671499994234,
+     "iqr_s": 0.0010764834987639915,
+     "q25_s": 0.04029155800162698,
+     "q75_s": 0.04136804150039097,
+     "min_s": 0.03969640100331162,
+     "max_s": 0.041849368000839604,
+     "n": 3,
+     "mean_s": 0.04081082800136452
+    }
+   },
+   "throughput_unit": "particle-steps/s",
+   "jax_throughput": 149427.40236607616,
+   "numpy_throughput": 313060.12234091316,
+   "speedup_vs_numpy": 0.47731215732214577,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-09,
+    "max_abs": 1.1429876142776685e-14,
+    "max_rel": 1.4472967748449346e-13,
+    "passed": true,
+    "detail": {
+     "positions": {
+      "max_abs": 3.3306690738754696e-16,
+      "max_rel": 3.4199735627926045e-16
+     },
+     "velocities": {
+      "max_abs": 1.1429876142776685e-14,
+      "max_rel": 1.4472967748449346e-13
+     }
+    }
+   },
+   "notes": "NumPy side finds neighbours with SciPy's compiled cKDTree."
+  },
+  {
+   "solver": "solve_euler_1d (MUSCL-HLLC, SSP-RK2)",
+   "size": "200 cells, 150 steps (Sod)",
+   "params": {
+    "n_cells": 200,
+    "n_steps": 150,
+    "dt": 0.0013333333333333335,
+    "t_end": 0.2
+   },
+   "jax": {
+    "first_call_s": 1.6724810209998395,
+    "compile": {
+     "trace": 0.04347515106201172,
+     "lower": 0.3238067626953125,
+     "backend": 1.2585439682006836,
+     "n": 24.0,
+     "compile_s": 1.6258258819580078
+    },
+    "steady": {
+     "median_s": 0.005632983000396052,
+     "iqr_s": 0.00013030499758315273,
+     "q25_s": 0.005559625002206303,
+     "q75_s": 0.005689929999789456,
+     "min_s": 0.005355630000849487,
+     "max_s": 0.005967703000351321,
+     "n": 5,
+     "mean_s": 0.005641174200718524
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.053936042000714224,
+     "iqr_s": 0.014939201000743196,
+     "q25_s": 0.05279314200015506,
+     "q75_s": 0.06773234300089825,
+     "min_s": 0.05165024199959589,
+     "max_s": 0.08152864400108228,
+     "n": 3,
+     "mean_s": 0.0623716426671308
+    }
+   },
+   "throughput_unit": "cell-steps/s",
+   "jax_throughput": 5325774.993088159,
+   "numpy_throughput": 556214.3399325211,
+   "speedup_vs_numpy": 9.575040790451881,
+   "agreement": {
+    "kind": "deterministic",
+    "rtol": 1e-10,
+    "max_abs": 2.914335439641036e-15,
+    "max_rel": 3.1353172923960608e-15,
+    "passed": true,
+    "detail": {
+     "rho": {
+      "max_abs": 2.1094237467877974e-15,
+      "max_rel": 2.1094237467877974e-15
+     },
+     "u": {
+      "max_abs": 2.914335439641036e-15,
+      "max_rel": 3.1353172923960608e-15
+     },
+     "p": {
+      "max_abs": 1.1102230246251565e-15,
+      "max_rel": 1.1102230246251565e-15
+     }
+    }
+   },
+   "notes": ""
+  },
+  {
+   "solver": "IsingLattice.run_metropolis (checkerboard)",
+   "size": "8x8, 200 sweeps",
+   "params": {
+    "L": 8,
+    "T": 3.5,
+    "n_sweeps": 200,
+    "n_warmup": 50
+   },
+   "jax": {
+    "first_call_s": 1.3896773780033982,
+    "compile": {
+     "trace": 0.03974151611328125,
+     "lower": 0.19129490852355957,
+     "backend": 1.1261839866638184,
+     "n": 15.0,
+     "compile_s": 1.3572204113006592
+    },
+    "steady": {
+     "median_s": 0.01043171199853532,
+     "iqr_s": 0.00030655999944428913,
+     "q25_s": 0.01022497200028738,
+     "q75_s": 0.01053153199973167,
+     "min_s": 0.010217741000815295,
+     "max_s": 0.010699706999730552,
+     "n": 5,
+     "mean_s": 0.010421132799820043
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.0690224110003328,
+     "iqr_s": 0.0006258835001062835,
+     "q25_s": 0.06867273900024884,
+     "q75_s": 0.06929862250035512,
+     "min_s": 0.06832306700016488,
+     "max_s": 0.06957483400037745,
+     "n": 3,
+     "mean_s": 0.06897343733362504
+    }
+   },
+   "throughput_unit": "spin-flip attempts/s",
+   "jax_throughput": 1533784.6752523943,
+   "numpy_throughput": 231808.76715423423,
+   "speedup_vs_numpy": 6.61659476508017,
+   "agreement": {
+    "kind": "statistical",
+    "jax_mean": -0.67125,
+    "jax_err": 0.04965191335688888,
+    "numpy_mean": -0.6775,
+    "numpy_err": 0.010299339245256896,
+    "z_score": 0.12325261317482712,
+    "n_sigma": 5.0,
+    "passed": true
+   },
+   "notes": "Different RNG streams and update orders (checkerboard vs random site): mean energy per spin compared statistically (5 sigma, blocked errors)."
+  },
+  {
+   "solver": "sweep_temperatures (Wolff cluster)",
+   "size": "8x8, 200 cluster updates",
+   "params": {
+    "L": 8,
+    "T": 3.5,
+    "n_updates": 200,
+    "n_warmup": 20
+   },
+   "jax": {
+    "first_call_s": 1.622261686999991,
+    "compile": {
+     "trace": 0.0678853988647461,
+     "lower": 0.21348118782043457,
+     "backend": 1.3107681274414062,
+     "n": 12.0,
+     "compile_s": 1.592134714126587
+    },
+    "steady": {
+     "median_s": 0.0067085849987051915,
+     "iqr_s": 0.0004882709981757216,
+     "q25_s": 0.006386182001733687,
+     "q75_s": 0.006874452999909408,
+     "min_s": 0.00623415999871213,
+     "max_s": 0.007714162999036489,
+     "n": 5,
+     "mean_s": 0.006783508599619381
+    },
+    "steady_compiles": 0.0
+   },
+   "numpy": {
+    "steady": {
+     "median_s": 0.014766643002076307,
+     "iqr_s": 0.00025450499924772885,
+     "q25_s": 0.014660729000752326,
+     "q75_s": 0.014915234000000055,
+     "min_s": 0.014554814999428345,
+     "max_s": 0.015063824997923803,
+     "n": 3,
+     "mean_s": 0.014795094333142819
+    }
+   },
+   "throughput_unit": "cluster updates/s",
+   "jax_throughput": 32793.80078548035,
+   "numpy_throughput": 14898.443740331926,
+   "speedup_vs_numpy": 2.201156131274536,
+   "agreement": {
+    "kind": "statistical",
+    "jax_mean": -0.6765625000000001,
+    "jax_err": 0.048461435618308915,
+    "numpy_mean": -0.67375,
+    "numpy_err": 0.02420255955242935,
+    "z_score": 0.051920892796845135,
+    "n_sigma": 5.0,
+    "passed": true
+   },
+   "notes": "Compared statistically against a textbook (stack-based) Wolff implementation (5 sigma)."
+  }
+ ],
+ "scaling": [
+  {
+   "kernel": "HamiltonianSystem (anharmonic, leapfrog)",
+   "work_per_trajectory": "20000 steps",
+   "rows": [
+    {
+     "batch": 1,
+     "compile_s": 0.15165472030639648,
+     "steady": {
+      "median_s": 0.0001941010013979394,
+      "iqr_s": 8.133996743708849e-06,
+      "q25_s": 0.0001878790026239585,
+      "q75_s": 0.00019601299936766736,
+      "min_s": 0.000186874000064563,
+      "max_s": 0.000228280001465464,
+      "n": 5,
+      "mean_s": 0.00019862940098391846
+     },
+     "trajectories_per_s": 5151.956933750349,
+     "efficiency": 1.0
+    },
+    {
+     "batch": 4,
+     "compile_s": 0.13047432899475098,
+     "steady": {
+      "median_s": 0.0002822989990818314,
+      "iqr_s": 1.3569002476288006e-05,
+      "q25_s": 0.0002743259974522516,
+      "q75_s": 0.0002878949999285396,
+      "min_s": 0.0002533899969421327,
+      "max_s": 0.00030752900056540966,
+      "n": 5,
+      "mean_s": 0.000281087798794033
+     },
+     "trajectories_per_s": 14169.37365350169,
+     "efficiency": 2.750289615326257
+    },
+    {
+     "batch": 16,
+     "compile_s": 0.16882777214050293,
+     "steady": {
+      "median_s": 0.002879184001358226,
+      "iqr_s": 5.868600055691786e-05,
+      "q25_s": 0.0028432969993446022,
+      "q75_s": 0.00290198299990152,
+      "min_s": 0.002833239999745274,
+      "max_s": 0.002924825999798486,
+      "n": 5,
+      "mean_s": 0.0028765060000296217
+     },
+     "trajectories_per_s": 5557.130073122163,
+     "efficiency": 1.078644512091616
+    }
+   ]
+  },
+  {
+   "kernel": "NBody (N=32)",
+   "work_per_trajectory": "2000 steps",
+   "rows": [
+    {
+     "batch": 1,
+     "compile_s": 0.27362847328186035,
+     "steady": {
+      "median_s": 0.008060578998993151,
+      "iqr_s": 0.0002922550011135172,
+      "q25_s": 0.007940040999528719,
+      "q75_s": 0.008232296000642236,
+      "min_s": 0.007640030999027658,
+      "max_s": 0.009084524997888366,
+      "n": 5,
+      "mean_s": 0.008191494399216025
+     },
+     "trajectories_per_s": 124.0605668804822,
+     "efficiency": 1.0
+    },
+    {
+     "batch": 4,
+     "compile_s": 0.2657942771911621,
+     "steady": {
+      "median_s": 0.10000547399977222,
+      "iqr_s": 0.005630911997286603,
+      "q25_s": 0.09768228100074339,
+      "q75_s": 0.10331319299802999,
+      "min_s": 0.09764404499946977,
+      "max_s": 0.10662528999819187,
+      "n": 5,
+      "mean_s": 0.10105405659924145
+     },
+     "trajectories_per_s": 39.99781051994324,
+     "efficiency": 0.32240551148276186
+    },
+    {
+     "batch": 16,
+     "compile_s": 0.2560458183288574,
+     "steady": {
+      "median_s": 0.25825813800111064,
+      "iqr_s": 0.0027763289981521666,
+      "q25_s": 0.2555438370000047,
+      "q75_s": 0.2583201659981569,
+      "min_s": 0.2544833469983132,
+      "max_s": 0.294717266002408,
+      "n": 5,
+      "mean_s": 0.26426455079999867
+     },
+     "trajectories_per_s": 61.95351722055393,
+     "efficiency": 0.4993812198217575
+    }
+   ]
+  },
+  {
+   "kernel": "solve_schrodinger (1024 points)",
+   "work_per_trajectory": "2000 steps",
+   "rows": [
+    {
+     "batch": 1,
+     "compile_s": 0.18000364303588867,
+     "steady": {
+      "median_s": 0.029925281000032555,
+      "iqr_s": 0.00026081200121552683,
+      "q25_s": 0.029896699998062104,
+      "q75_s": 0.03015751199927763,
+      "min_s": 0.02982827400046517,
+      "max_s": 0.03035494800133165,
+      "n": 5,
+      "mean_s": 0.030032542999833822
+     },
+     "trajectories_per_s": 33.416561735841746,
+     "efficiency": 1.0
+    },
+    {
+     "batch": 4,
+     "compile_s": 0.1676797866821289,
+     "steady": {
+      "median_s": 0.09171830600098474,
+      "iqr_s": 0.0025344360001327004,
+      "q25_s": 0.08919001599861076,
+      "q75_s": 0.09172445199874346,
+      "min_s": 0.08808209700146108,
+      "max_s": 0.10292124899933697,
+      "n": 5,
+      "mean_s": 0.0927272239998274
+     },
+     "trajectories_per_s": 43.61179544634256,
+     "efficiency": 1.3050952336477415
+    },
+    {
+     "batch": 16,
+     "compile_s": 0.18007636070251465,
+     "steady": {
+      "median_s": 0.5318404380013817,
+      "iqr_s": 0.030241131000366295,
+      "q25_s": 0.5284049159999995,
+      "q75_s": 0.5586460470003658,
+      "min_s": 0.5209519190029823,
+      "max_s": 0.571643513001618,
+      "n": 5,
+      "mean_s": 0.5422973666012695
+     },
+     "trajectories_per_s": 30.08421108429975,
+     "efficiency": 0.9002784703619641
+    }
+   ]
+  },
+  {
+   "kernel": "EMGrid 2D FDTD (100x100), batch of source frequencies",
+   "work_per_trajectory": "300 steps",
+   "rows": [
+    {
+     "batch": 1,
+     "compile_s": 0.4039120674133301,
+     "steady": {
+      "median_s": 0.01006830200276454,
+      "iqr_s": 0.00041717299973242916,
+      "q25_s": 0.00979474899941124,
+      "q75_s": 0.01021192199914367,
+      "min_s": 0.009652085998823168,
+      "max_s": 0.010882094997214153,
+      "n": 5,
+      "mean_s": 0.010121830799471354
+     },
+     "trajectories_per_s": 99.32161348809575,
+     "efficiency": 1.0
+    },
+    {
+     "batch": 4,
+     "compile_s": 0.43479180335998535,
+     "steady": {
+      "median_s": 0.0795123780007998,
+      "iqr_s": 0.010573417999694357,
+      "q25_s": 0.07560629500221694,
+      "q75_s": 0.0861797130019113,
+      "min_s": 0.0641153430005943,
+      "max_s": 0.09319550800137222,
+      "n": 5,
+      "mean_s": 0.07972184740137891
+     },
+     "trajectories_per_s": 50.30663276049629,
+     "efficiency": 0.506502371374845
+    },
+    {
+     "batch": 16,
+     "compile_s": 0.6218342781066895,
+     "steady": {
+      "median_s": 0.17747242500263383,
+      "iqr_s": 0.06634811600088142,
+      "q25_s": 0.1475016490003327,
+      "q75_s": 0.2138497650012141,
+      "min_s": 0.14536536800005706,
+      "max_s": 0.23222791200169013,
+      "n": 5,
+      "mean_s": 0.18328342380118556
+     },
+     "trajectories_per_s": 90.15485081562697,
+     "efficiency": 0.9077062650259154
+    }
+   ]
+  },
+  {
+   "kernel": "LBMGrid (100x40), batch of initial perturbations",
+   "work_per_trajectory": "300 steps",
+   "rows": [
+    {
+     "batch": 1,
+     "compile_s": 0.5346148014068604,
+     "steady": {
+      "median_s": 0.06839418900199234,
+      "iqr_s": 0.003074411997658899,
+      "q25_s": 0.06537519700214034,
+      "q75_s": 0.06844960899979924,
+      "min_s": 0.06438025100214873,
+      "max_s": 0.07108698800220736,
+      "n": 5,
+      "mean_s": 0.0675372468016576
+     },
+     "trajectories_per_s": 14.621125194873935,
+     "efficiency": 1.0
+    },
+    {
+     "batch": 4,
+     "compile_s": 0.6303229331970215,
+     "steady": {
+      "median_s": 0.218619249000767,
+      "iqr_s": 0.017562601999088656,
+      "q25_s": 0.2146175520028919,
+      "q75_s": 0.23218015400198055,
+      "min_s": 0.18777007099924958,
+      "max_s": 0.251500133999798,
+      "n": 5,
+      "mean_s": 0.2209374320009374
+     },
+     "trajectories_per_s": 18.296650538699666,
+     "efficiency": 1.2513845750472299
+    },
+    {
+     "batch": 16,
+     "compile_s": 0.6021318435668945,
+     "steady": {
+      "median_s": 0.9253219409984013,
+      "iqr_s": 0.13083140199887566,
+      "q25_s": 0.8398734069996863,
+      "q75_s": 0.9707048089985619,
+      "min_s": 0.774360113999137,
+      "max_s": 0.9800981570006115,
+      "n": 5,
+      "mean_s": 0.8980716855992796
+     },
+     "trajectories_per_s": 17.291279165753235,
+     "efficiency": 1.1826230153487394
+    }
+   ]
+  },
+  {
+   "kernel": "sweep_temperatures Metropolis (16x16), batch of temperatures",
+   "work_per_trajectory": "20 sweeps",
+   "rows": [
+    {
+     "batch": 1,
+     "compile_s": 0.7542610168457031,
+     "steady": {
+      "median_s": 0.001910270999360364,
+      "iqr_s": 9.344999853055924e-05,
+      "q25_s": 0.0018926920020021498,
+      "q75_s": 0.001986142000532709,
+      "min_s": 0.0018822689999069553,
+      "max_s": 0.002094396000757115,
+      "n": 5,
+      "mean_s": 0.0019531540005118587
+     },
+     "trajectories_per_s": 523.4859348934473,
+     "efficiency": 1.0
+    },
+    {
+     "batch": 4,
+     "compile_s": 1.8233067989349365,
+     "steady": {
+      "median_s": 0.0036779520014533773,
+      "iqr_s": 0.00014512200141325593,
+      "q25_s": 0.0035825419981847517,
+      "q75_s": 0.0037276639995980076,
+      "min_s": 0.0033575100023881532,
+      "max_s": 0.0037935959990136325,
+      "n": 5,
+      "mean_s": 0.0036278528001275844
+     },
+     "trajectories_per_s": 1087.561773078975,
+     "efficiency": 2.077537715125703
+    },
+    {
+     "batch": 16,
+     "compile_s": 1.9986457824707031,
+     "steady": {
+      "median_s": 0.014381101002072683,
+      "iqr_s": 0.0011202339992451016,
+      "q25_s": 0.01375747199926991,
+      "q75_s": 0.014877705998515012,
+      "min_s": 0.011750182002288057,
+      "max_s": 0.032282743999530794,
+      "n": 5,
+      "mean_s": 0.01740984100033529
+     },
+     "trajectories_per_s": 1112.5712834986691,
+     "efficiency": 2.1253126575886454
+    }
+   ]
+  }
+ ],
+ "accuracy": [
+  {
+   "name": "Energy error over long runs: symplectic vs RK4 (Kepler, e=0.5)",
+   "setup": {
+    "eccentricity": 0.5,
+    "orbits": 100,
+    "steps_per_orbit": 200,
+    "dt": 0.031415926535897934,
+    "energy_sampled_every_steps": 10
+   },
+   "rows": [
+    {
+     "integrator": "symplectic_euler",
+     "max_abs_rel_energy_error": 0.05228955292988855,
+     "final_rel_energy_error": 0.032935758563279446,
+     "max_error_first_half": 0.05228955292988855,
+     "max_error_second_half": 0.05228192275563657,
+     "linear_drift_per_orbit": -5.034034673604916e-06
+    },
+    {
+     "integrator": "leapfrog",
+     "max_abs_rel_energy_error": 0.0026893817734088264,
+     "final_rel_energy_error": 0.002639909334072542,
+     "max_error_first_half": 0.0026893817734088264,
+     "max_error_second_half": 0.002689381332531936,
+     "linear_drift_per_orbit": 5.468387716703182e-08
+    },
+    {
+     "integrator": "yoshida4",
+     "max_abs_rel_energy_error": 9.237032246645068e-06,
+     "final_rel_energy_error": 7.483776265360117e-09,
+     "max_error_first_half": 9.237032246645068e-06,
+     "max_error_second_half": 9.237032166931055e-06,
+     "linear_drift_per_orbit": 5.445822813530782e-12
+    },
+    {
+     "integrator": "rk4",
+     "max_abs_rel_energy_error": 9.328910365957728e-05,
+     "final_rel_energy_error": -9.274952467830384e-05,
+     "max_error_first_half": 4.698177507789223e-05,
+     "max_error_second_half": 9.328910365957728e-05,
+     "linear_drift_per_orbit": -9.261596667154528e-07
+    }
+   ],
+   "criterion": "leapfrog/yoshida4 max error in 2nd half <= 1.5x 1st half (bounded); rk4 2nd half > 1.5x 1st half (secular drift)",
+   "passed": true
+  },
+  {
+   "name": "Convergence order vs dt",
+   "rows": [
+    {
+     "problem": "harmonic oscillator (t=10)",
+     "integrator": "euler",
+     "expected_order": 1,
+     "measured_order": 1.0817094462855485,
+     "dts": [
+      0.1,
+      0.05,
+      0.025,
+      0.0125
+     ],
+     "errors": [
+      0.5697754538395646,
+      0.2437548283596883,
+      0.11296564254522001,
+      0.054412571046595026
+     ],
+     "passed": true
+    },
+    {
+     "problem": "harmonic oscillator (t=10)",
+     "integrator": "symplectic_euler",
+     "expected_order": 1,
+     "measured_order": 1.0232449278860443,
+     "dts": [
+      0.1,
+      0.05,
+      0.025,
+      0.0125
+     ],
+     "errors": [
+      0.029686707943240576,
+      0.014193939820402734,
+      0.006945237326993481,
+      0.003435960220309897
+     ],
+     "passed": true
+    },
+    {
+     "problem": "harmonic oscillator (t=10)",
+     "integrator": "leapfrog",
+     "expected_order": 2,
+     "measured_order": 1.999664374016116,
+     "dts": [
+      0.1,
+      0.05,
+      0.025,
+      0.0125
+     ],
+     "errors": [
+      0.002810503355285543,
+      0.0007036769499441098,
+      0.00017598474300650757,
+      4.400027690043551e-05
+     ],
+     "passed": true
+    },
+    {
+     "problem": "harmonic oscillator (t=10)",
+     "integrator": "yoshida4",
+     "expected_order": 4,
+     "measured_order": 4.000317239591747,
+     "dts": [
+      0.1,
+      0.05,
+      0.025,
+      0.0125
+     ],
+     "errors": [
+      5.767700272540921e-05,
+      3.5996905890511854e-06,
+      2.2490152462584234e-07,
+      1.4055108743527e-08
+     ],
+     "passed": true
+    },
+    {
+     "problem": "harmonic oscillator (t=10)",
+     "integrator": "rk4",
+     "expected_order": 4,
+     "measured_order": 4.013780370547609,
+     "dts": [
+      0.1,
+      0.05,
+      0.025,
+      0.0125
+     ],
+     "errors": [
+      7.34464059715112e-06,
+      4.4842867974459466e-07,
+      2.7676339442450626e-08,
+      1.7185287637389024e-09
+     ],
+     "passed": true
+    },
+    {
+     "problem": "Kepler e=0.5 (t=0.37 T)",
+     "integrator": "euler",
+     "expected_order": 1,
+     "measured_order": 0.9912534017237113,
+     "dts": [
+      0.005811946409141118,
+      0.002905973204570559,
+      0.0014529866022852795,
+      0.0007264933011426397
+     ],
+     "errors": [
+      0.09258459363928279,
+      0.04703243767594095,
+      0.023706569605501104,
+      0.011901548595474654
+     ],
+     "passed": true
+    },
+    {
+     "problem": "Kepler e=0.5 (t=0.37 T)",
+     "integrator": "symplectic_euler",
+     "expected_order": 1,
+     "measured_order": 0.9949470656601612,
+     "dts": [
+      0.005811946409141118,
+      0.002905973204570559,
+      0.0014529866022852795,
+      0.0007264933011426397
+     ],
+     "errors": [
+      0.023736045372619308,
+      0.01198107791785541,
+      0.006018640055592106,
+      0.0030163245638094027
+     ],
+     "passed": true
+    },
+    {
+     "problem": "Kepler e=0.5 (t=0.37 T)",
+     "integrator": "leapfrog",
+     "expected_order": 2,
+     "measured_order": 2.0000031228966186,
+     "dts": [
+      0.005811946409141118,
+      0.002905973204570559,
+      0.0014529866022852795,
+      0.0007264933011426397
+     ],
+     "errors": [
+      0.00025201731485763323,
+      6.300345600562807e-05,
+      1.575080945775964e-05,
+      3.937698953015989e-06
+     ],
+     "passed": true
+    },
+    {
+     "problem": "Kepler e=0.5 (t=0.37 T)",
+     "integrator": "yoshida4",
+     "expected_order": 4,
+     "measured_order": 3.999797264376005,
+     "dts": [
+      0.005811946409141118,
+      0.002905973204570559,
+      0.0014529866022852795,
+      0.0007264933011426397
+     ],
+     "errors": [
+      5.340680236942674e-08,
+      3.3391715503761077e-09,
+      2.0867896299847644e-10,
+      1.3058665260246016e-11
+     ],
+     "passed": true
+    },
+    {
+     "problem": "Kepler e=0.5 (t=0.37 T)",
+     "integrator": "rk4",
+     "expected_order": 4,
+     "measured_order": 4.021276652222176,
+     "dts": [
+      0.005811946409141118,
+      0.002905973204570559,
+      0.0014529866022852795,
+      0.0007264933011426397
+     ],
+     "errors": [
+      6.140281894051469e-09,
+      3.781494006815933e-10,
+      2.3483548439173774e-11,
+      1.4518941604535485e-12
+     ],
+     "passed": true
+    }
+   ],
+   "criterion": "|measured - expected| <= 0.3 (log-log least-squares fit over the three finest dt with error > 1e-10, i.e. above round-off)",
+   "passed": true
+  },
+  {
+   "name": "Schrodinger: norm conservation + free Gaussian wavepacket",
+   "norm": {
+    "n_points": 2048,
+    "n_steps": 5000,
+    "max_abs_norm_deviation": 4.68070027181966e-13,
+    "passed": true
+   },
+   "free_gaussian": [
+    {
+     "n_points": 1024,
+     "t": 5.0,
+     "psi_rel_l2_error_vs_exact": 3.716421241142232e-13,
+     "density_rel_l2_error_vs_exact": 4.525750495652899e-13,
+     "center_measured": 5.000000000002128,
+     "center_exact": 5.0,
+     "width_measured": 2.692582403565699,
+     "width_exact": 2.692582403567252
+    }
+   ],
+   "criterion": "norm deviation < 1e-10; free packet: psi relative L2 error vs the exact solution < 1e-8 at t=5 on every grid (V = 0, so the split-operator step is exact in time and the FFT grid is spectrally accurate)",
+   "passed": true
+  },
+  {
+   "name": "FDTD PEC cavity mode frequencies",
+   "setup": {
+    "cavity_length_m": 0.6,
+    "dx": 0.01,
+    "dt": 2.3350677933821873e-11,
+    "n_steps": 12000,
+    "probe_sampled_every_steps": 4
+   },
+   "rows": [
+    {
+     "mode": 1,
+     "measured_hz": 249812205.18819022,
+     "analytic_continuum_hz": 249827048.33333334,
+     "analytic_yee_dispersion_hz": 249812493.61472604,
+     "rel_error_vs_continuum": -5.941368335472194e-05,
+     "rel_error_vs_yee": -1.1545721018254078e-06,
+     "fft_bin_rel": 0.014284985478516112
+    },
+    {
+     "mode": 2,
+     "measured_hz": 499530559.3394738,
+     "analytic_continuum_hz": 499654096.6666667,
+     "analytic_yee_dispersion_hz": 499537618.0861795,
+     "rel_error_vs_continuum": -0.00024724570060979164,
+     "rel_error_vs_yee": -1.413056084295362e-05,
+     "fft_bin_rel": 0.007142492739258056
+    },
+    {
+     "mode": 3,
+     "measured_hz": 749059818.9323913,
+     "analytic_continuum_hz": 749481145.0,
+     "analytic_yee_dispersion_hz": 749087800.0171094,
+     "rel_error_vs_continuum": -0.0005621569941011846,
+     "rel_error_vs_yee": -3.735354482808168e-05,
+     "fft_bin_rel": 0.004761661826172037
+    },
+    {
+     "mode": 4,
+     "measured_hz": 998315104.827314,
+     "analytic_continuum_hz": 999308193.3333334,
+     "analytic_yee_dispersion_hz": 998375057.0562944,
+     "rel_error_vs_continuum": -0.000993776006886091,
+     "rel_error_vs_yee": -6.004980648974842e-05,
+     "fft_bin_rel": 0.003571246369629028
+    }
+   ],
+   "criterion": "|f_measured / f_yee - 1| < 5e-4 for modes 1-4",
+   "passed": true
+  },
+  {
+   "name": "Ising critical temperature (Binder cumulant crossing, Metropolis)",
+   "setup": {
+    "temperatures": [
+     2.15,
+     2.175,
+     2.1999999999999997,
+     2.225,
+     2.25,
+     2.275,
+     2.3,
+     2.3249999999999997,
+     2.35,
+     2.375,
+     2.4
+    ],
+    "sizes": [
+     8,
+     16
+    ],
+    "n_sweeps": 3000,
+    "n_warmup": 500,
+    "onsager_tc": 2.269185314213022
+   },
+   "binder": {
+    "8": [
+     0.6386181450085106,
+     0.6384149773837712,
+     0.6229543990164637,
+     0.6307843157039285,
+     0.6262537177972738,
+     0.6192947551239811,
+     0.6065441588831739,
+     0.5963426734708808,
+     0.5868919627279261,
+     0.5798350849125693,
+     0.5690917840307373
+    ],
+    "16": [
+     0.648669436816685,
+     0.6459961372939735,
+     0.6381942786585366,
+     0.6256886309583426,
+     0.617107479462382,
+     0.6097487708811598,
+     0.5965706851847427,
+     0.5835925754711508,
+     0.5315638175032428,
+     0.5425728509970067,
+     0.49929803259023864
+    ]
+   },
+   "crossings": [
+    {
+     "sizes": [
+      8,
+      16
+     ],
+     "tc_estimate": 2.2326547695691294,
+     "jackknife_error": 0.026013443957202412,
+     "deviation_from_onsager": -0.036530544643892604,
+     "rel_deviation": -0.01609852858428259
+    }
+   ],
+   "criterion": "largest-size-pair crossing (cubic fits of U_L(T)) within 3 jackknife errors + 1% (finite-size allowance) of Onsager T_c; Wolff and Metropolis mean energies agree within 5 sigma (blocked errors) at T = 2.0 and 3.0",
+   "passed": true,
+   "tc_passed": true,
+   "wolff_vs_metropolis": {
+    "lattice": 16,
+    "samples_per_chain": 2000,
+    "rows": [
+     {
+      "temperature": 2.0,
+      "wolff_energy": -1.7457968750000004,
+      "wolff_err": 0.002984611798266013,
+      "metropolis_energy": -1.7476406249999996,
+      "metropolis_err": 0.004047557603475702,
+      "z_score": 0.36662511157294114,
+      "passed": true
+     },
+     {
+      "temperature": 3.0,
+      "wolff_energy": -0.8295625000000001,
+      "wolff_err": 0.014054029795580543,
+      "metropolis_energy": -0.8167968750000002,
+      "metropolis_err": 0.004303120461145029,
+      "z_score": 0.868525226423144,
+      "passed": true
+     }
+    ],
+    "passed": true
+   }
+  },
+  {
+   "name": "LBM plane channel vs analytic",
+   "decay": [
+    {
+     "channel_width_nodes": 16,
+     "measured_decay_rate": 0.0038638283036643755,
+     "analytic_decay_rate_halfway_walls": 0.0038553142191755305,
+     "rel_error": 0.0022084022221840493,
+     "effective_width_from_rate": 15.982361990716301,
+     "max_mode_shape_residual": 0.00017437044469768216
+    },
+    {
+     "channel_width_nodes": 32,
+     "measured_decay_rate": 0.0009643418418582938,
+     "analytic_decay_rate_halfway_walls": 0.0009638285547938826,
+     "rel_error": 0.0005325501738438424,
+     "effective_width_from_rate": 31.99148259902509,
+     "max_mode_shape_residual": 2.167745071705839e-05
+    }
+   ],
+   "decay_error_convergence_order_in_1_over_H": 2.052013598578352,
+   "driven": {
+    "grid": [
+     160,
+     34
+    ],
+    "u_inlet": 0.04,
+    "n_steps": 12000,
+    "profile_max_error_vs_parabola": 0.0007681357818891517,
+    "profile_rel_l2_error_vs_parabola": 0.0005793513193573823,
+    "mean_density_by_snapshot": [
+     0.9999999999999998,
+     1.0139156726323448,
+     1.0115290813890976,
+     1.0118094303922753,
+     1.0117811115035726
+    ],
+    "snapshot_steps": [
+     0,
+     3000,
+     6000,
+     9000,
+     12000
+    ],
+    "mass_change_last_interval": 2.7989145459106314e-05,
+    "max_flux_error_vs_inflow": 5.4969041247687755e-05,
+    "dp_dx_measured": -4.863524812028081e-05,
+    "dp_dx_poiseuille": -4.825792494115123e-05,
+    "dp_dx_rel_error": 0.007818885283395582,
+    "passed": true
+   },
+   "criterion": "(a) shear-mode decay-rate error < 5% at every width; (b) steady driven channel: relative mass change < 1e-4 over the last snapshot interval, every cross-section carries the inflow to 1e-4, profile within 0.5% of the parabola, dp/dx within 5% of -12 mu u_mean / H^2",
+   "passed": true
+  },
+  {
+   "name": "jax.grad through simulate() vs central finite differences",
+   "rows": [
+    {
+     "case": "HamiltonianSystem: d q(10) / d k (anharmonic, 10000 steps)",
+     "at": 2.0,
+     "autodiff": 2.2981859197207624,
+     "central_fd": 2.298185917615214,
+     "fd_step": 2e-05,
+     "rel_diff": 9.161783492426605e-10,
+     "passed": true
+    },
+    {
+     "case": "HamiltonianSystem: d q(10) / d q0",
+     "at": 1.0,
+     "autodiff": 2.7599470418428522,
+     "central_fd": 2.7599470402484,
+     "fd_step": 1e-05,
+     "rel_diff": 5.777111309144661e-10,
+     "passed": true
+    },
+    {
+     "case": "NBody: d sum|x(1)|^2 / d vx0 (N=8, 2000 steps)",
+     "at": -0.11842844218378551,
+     "autodiff": -0.6409748834314085,
+     "central_fd": -0.6409748918301261,
+     "fd_step": 1e-05,
+     "rel_diff": 1.3103036823001517e-08,
+     "passed": true
+    },
+    {
+     "case": "LagrangianSystem pendulum: d theta(5) / d g (rk4, 5000 steps)",
+     "at": 9.81,
+     "autodiff": -0.11200931099689533,
+     "central_fd": -0.11200931096921136,
+     "fd_step": 9.810000000000001e-05,
+     "rel_diff": 2.471577227910119e-10,
+     "passed": true
+    }
+   ],
+   "criterion": "relative difference < 1e-6 (central FD truncation error ~h^2)",
+   "passed": true
+  },
+  {
+   "name": "Compressible Euler: Sod shock tube vs exact Riemann solution",
+   "rows": [
+    {
+     "n_cells": 100,
+     "density_l1_error": 0.007891319711162092,
+     "t": 0.2
+    },
+    {
+     "n_cells": 200,
+     "density_l1_error": 0.004272481472016111,
+     "t": 0.2
+    },
+    {
+     "n_cells": 400,
+     "density_l1_error": 0.0024138395171192993,
+     "t": 0.2
+    }
+   ],
+   "observed_order_in_dx": 0.8544684141159634,
+   "criterion": "density L1 error < 5e-3 at 400 cells and decreasing under refinement (discontinuities limit the order to <= 1)",
+   "passed": true
+  },
+  {
+   "name": "FDFD line source vs 2D Green's function (Hankel H0)",
+   "rows": [
+    {
+     "points_per_wavelength": 15,
+     "grid": 51,
+     "max_rel_error_axis": 0.022877888548351377,
+     "max_rel_error_diagonal": 0.03202974419284346
+    },
+    {
+     "points_per_wavelength": 30,
+     "grid": 103,
+     "max_rel_error_axis": 0.0053529764134048535,
+     "max_rel_error_diagonal": 0.007329572757486519
+    }
+   ],
+   "observed_order_in_dx": 2.127611265111785,
+   "criterion": "max relative error < 2% at 30 points per wavelength, second-order convergence (order within 0.5 of 2)",
+   "passed": true
+  },
+  {
+   "name": "SPH standing sound wave (quarter period vs L / 4 c0)",
+   "n_particles": 576,
+   "quarter_period_measured": 0.025202952154584148,
+   "quarter_period_expected": 0.025,
+   "rel_error": 0.008118086183365847,
+   "max_abs_momentum": 5.975158639475668e-15,
+   "energy_change_over_initial_ke": 0.00048602537717670204,
+   "criterion": "kinetic-energy minimum within 3% of L / (4 c0); total momentum < 1e-12; energy change < 1e-3 of the initial kinetic energy",
+   "passed": true
+  }
+ ],
+ "wall_time_s": 113.36294058699787,
+ "summary": {
+  "failures": []
+ }
+}
