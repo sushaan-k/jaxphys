@@ -49,20 +49,40 @@ There's a massive gap for a **modern, GPU-accelerated, differentiable physics li
 
 | Simulation | NumPy | jaxphys (JIT) | Speedup |
 |---|---|---|---|
-| N-body, velocity Verlet (N=1000, 200 steps) | 13.97 s | 4.95 s | 2.8x |
-| Schrödinger 2D, split-operator (256×256, 500 steps) | 1.34 s | 0.98 s | 1.4x |
-| SPH, weakly compressible (4096 particles, 200 steps) | 2.59 s | 5.29 s | 0.5x |
-| FDTD 3D Yee + split-field PML (64³, 200 steps) | 6.72 s | 1.74 s | 3.9x |
+| N-body, velocity Verlet (N=1000, 200 steps) | 12.64 s | 0.78 s | 16.3x |
+| Schrödinger 2D, split-operator (256×256, 500 steps) | 1.20 s | 0.72 s | 1.7x |
+| SPH, weakly compressible (4096 particles, 200 steps) | 2.34 s | 3.63 s | 0.6x |
+| FDTD 3D Yee + split-field PML (64³, 200 steps) | 6.20 s | 0.74 s | 8.4x |
 
 *Measured on CPU only: a cloud container with 4 logical cores of an Intel
 Xeon @ 2.80GHz (jax 0.10.2, NumPy 2.4.6, float64), shared with other jobs, so
-expect some run-to-run variation. No GPU numbers have been measured. The
-NumPy columns are straightforward vectorized implementations of the same
-schemes (the SPH baseline finds neighbours with SciPy's compiled `cKDTree`,
-which is why it wins on CPU); every row asserts that both final states
-agree before timing. JAX times exclude the first (compiling) call and use
-`block_until_ready()`. Reproduce with `python examples/bench.py`
-(`--quick` for a fast smoke run).*
+expect run-to-run variation (an earlier run of the same FDTD code took
+1.74 s). No GPU numbers have been measured. The NumPy columns are
+straightforward vectorized implementations of the same schemes (the SPH
+baseline finds neighbours with SciPy's compiled `cKDTree`, which is why it
+wins on CPU); every row asserts that both final states agree before timing.
+JAX times exclude the first (compiling) call and use `block_until_ready()`.
+Reproduce with `python examples/bench.py` (`--quick` for a fast smoke run).
+A larger suite with per-solver timings, compile times and vmap scaling is in
+[docs/benchmarks.md](docs/benchmarks.md).*
+
+### Validation
+
+`python -m benchmarks.run` also runs physics checks against analytic or
+independent results (full run, CPU; details and reproduce commands in
+[docs/benchmarks.md](docs/benchmarks.md)):
+
+| Check | Result |
+|---|---|
+| Energy error, Kepler orbit (e = 0.5), 1000 orbits | leapfrog 2.7e-3 and Yoshida-4 9.2e-6, bounded (same maximum in both halves of the run); RK4 drifts linearly (4.6e-4 in the first half, 9.3e-4 in the second) |
+| Convergence order (oscillator / Kepler) | Euler 1.02 / 1.00, symplectic Euler 1.01 / 1.00, leapfrog 2.00 / 2.00, Yoshida-4 4.00 / 4.00, RK4 4.01 / 4.02 |
+| Ising T_c from Binder-cumulant crossings (L = 16 / 32) | 2.2683 ± 0.0104 vs Onsager 2.2692; Wolff and Metropolis energies agree (z = 0.23 at T = 2, 0.93 at T = 3) |
+| FDTD PEC cavity, modes 1-4 | within 6.7e-5 of the Yee dispersion relation |
+| Schrödinger | norm conserved to 2.5e-12 over 20000 steps; free Gaussian packet matches the exact solution to 3.8e-13 |
+| LBM channel | shear-mode decay rate within 0.22% / 0.05% / 0.01% (H = 16 / 32 / 64, second order); driven channel reaches a steady Poiseuille profile (0.08% from the parabola, dp/dx 0.8% from -12 μ u / H²) with mass flux conserved to 2e-11 |
+| Sod shock tube (1D Euler) | density L1 error 2.4e-3 at 400 cells, 7.8e-4 at 1600 |
+| FDFD line source vs Hankel Green's function | max error 0.7% at 30 points per wavelength |
+| `jax.grad` through `simulate()` vs central finite differences | relative differences 2.5e-10 to 1.3e-8 |
 
 ## Supported Domains
 
@@ -338,18 +358,21 @@ pip install -e ".[all]"
 pytest tests/ -v
 
 # Lint
-ruff check src tests examples
-ruff format src tests examples
+ruff check src tests examples benchmarks
+ruff format src tests examples benchmarks
 
 # Type check
 mypy src/jaxphys/
+
+# Benchmark + validation suite (writes benchmarks/results/)
+JAX_PLATFORMS=cpu python -m benchmarks.run --quick
 ```
 
 ## Performance Notes
 
 - Every simulation loop is one compiled `jax.lax.scan`; only the saved snapshots are stored, and reverse-mode gradients recompute the steps between them instead of storing every step
-- JIT compilation: the first call compiles, later calls with the same shapes reuse the compiled loop
-- Pairwise forces are vectorized with `jnp.einsum`; SPH uses a cell list, so its cost grows linearly with the particle count
+- JIT compilation: the first call compiles, later calls with the same shapes reuse the compiled loop, including calls with new parameter values (masses, charges, inertia, temperatures, fluid constants are traced arguments); `tests/test_performance.py` checks that repeated calls trigger zero compilations
+- N-body forces are computed on per-component (N, N) planes with `rsqrt`; SPH uses a cell list, so its cost grows linearly with the particle count
 - Ising temperature sweeps run as one `jax.vmap`-ed batch of chains
 - For GPU: install JAX with CUDA support, e.g. `pip install -U "jax[cuda12]"`
 
