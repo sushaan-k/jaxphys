@@ -4,49 +4,6 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
-### Changed
-
-- Repeated calls never recompile. `sweep_temperatures` built a new jitted
-  closure per call, and `RigidBody`, `ChargeSystem` and `SPHFluid` baked
-  their constants into per-instance executables; all of them now run
-  module-level compiled loops that take the system data as traced
-  arguments, so new parameter values (inertia, charges, sound speed,
-  temperatures, ...) reuse the executable. `optimize()` compiles the
-  gradient once per objective, and `TightBinding.bands` is compiled.
-  `tests/test_performance.py` checks zero compilations on repeated calls
-  for every solver.
-- Faster kernels: the N-body force uses per-component planes and `rsqrt`
-  (2.6x to 6x faster for N = 64 to 1000 on CPU), and the LBM keeps its
-  populations population-major inside the loop (1.3x to 2x). Results agree
-  with the previous kernels to round-off (max relative difference 3e-14).
-- Hamiltonian, Lagrangian and rigid-body params that user code needs as
-  concrete values (for example `if params.k > 0:`) no longer fail with a
-  tracer error: they are compiled in as constants, cached per value.
-
-### Added
-
-- `benchmarks/`: a reproducible benchmark and validation suite
-  (`python -m benchmarks.run [--quick]`) that times every solver through
-  its public API against a NumPy implementation of the same scheme,
-  measures vmap scaling, and runs physics validation experiments; plus
-  `benchmarks/compare_revisions.py` for before/after comparisons between
-  git revisions. Results and methodology are in `docs/benchmarks.md`.
-  CI runs the quick suite.
-
-### Fixed
-
-- `LBMGrid` gained mass without bound: the zero-gradient outlet does not
-  fix the pressure, so with a velocity inlet the mean density grew (1.00 to
-  2.26 in 20000 steps in a 160x34 channel) and long runs diverged. The
-  outlet is now a Zou-He pressure boundary (rho = 1); a no-slip channel
-  reaches a steady Poiseuille state with stationary mass. Free-slip wall
-  nodes start at the local equilibrium, which removes a start-up
-  transient.
-- `NBody` and `RigidBody` can be constructed inside `jax.jit`/`jax.vmap`
-  (their argument checks raised `TracerBoolConversionError`).
-
 ## [0.2.0] - 2026-09-25
 
 ### Changed
@@ -84,6 +41,22 @@ All notable changes to this project are documented here. The format follows
 - `optimize()` compiles the gradient once instead of re-tracing per
   iteration; `projectile()` returns a pytree `ProjectileResult`.
 - Minimum supported JAX is 0.4.30.
+- Repeated calls never recompile. `sweep_temperatures` built a new jitted
+  closure per call, and `RigidBody`, `ChargeSystem` and `SPHFluid` baked
+  their constants into per-instance executables; all of them now run
+  module-level compiled loops that take the system data as traced
+  arguments, so new parameter values (inertia, charges, sound speed,
+  temperatures, ...) reuse the executable. `optimize()` compiles the
+  gradient once per objective, and `TightBinding.bands` is compiled.
+  `tests/test_performance.py` checks zero compilations on repeated calls
+  for every solver.
+- Faster kernels: the N-body force uses per-component planes and `rsqrt`
+  (2.6x to 6x faster for N = 64 to 1000 on CPU), and the LBM keeps its
+  populations population-major inside the loop (1.3x to 2x). Results agree
+  with the previous kernels to round-off (max relative difference 3e-14).
+- Hamiltonian, Lagrangian and rigid-body params that user code needs as
+  concrete values (for example `if params.k > 0:`) no longer fail with a
+  tracer error: they are compiled in as constants, cached per value.
 
 ### Added
 
@@ -101,6 +74,13 @@ All notable changes to this project are documented here. The format follows
   reference before timing it.
 - CI matrix for Python 3.11-3.13, a build-and-install wheel smoke job, and a
   tag-triggered release workflow using PyPI trusted publishing.
+- `benchmarks/`: a reproducible benchmark and validation suite
+  (`python -m benchmarks.run [--quick]`) that times every solver through
+  its public API against a NumPy implementation of the same scheme,
+  measures vmap scaling, and runs physics validation experiments; plus
+  `benchmarks/compare_revisions.py` for before/after comparisons between
+  git revisions. Results and methodology are in `docs/benchmarks.md`.
+  CI runs the quick suite.
 
 ### Fixed
 
@@ -131,3 +111,13 @@ All notable changes to this project are documented here. The format follows
   `boundary` argument; `NavierStokesSolver` vorticity ignored `dx`.
 - N-body and Coulomb accelerations produced NaN gradients without softening.
 - `optimize(method="adam")` reported one more iteration than it performed.
+- `LBMGrid` gained mass without bound: the zero-gradient outlet does not
+  fix the pressure, so with a velocity inlet the mean density grew (1.00 to
+  2.26 in 20000 steps in a 160x34 channel) and long runs diverged. The
+  outlet is now a Zou-He pressure boundary (rho = 1); a no-slip channel
+  reaches a steady Poiseuille state with stationary mass. Free-slip wall
+  nodes start at the local equilibrium, which removes a start-up
+  transient.
+- `NBody` and `RigidBody` can be constructed inside `jax.jit`/`jax.vmap`
+  (their argument checks raised `TracerBoolConversionError`).
+
